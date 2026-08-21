@@ -51,6 +51,7 @@ struct GatherResourcesSession
     uint32 arrivedTime = 0;     // getMSTime() when bot reached the zone (timer start)
     uint32 nextDecision = 0;    // throttle between gathering decisions
     uint32 nextStart = 0;       // getMSTime() before which a new session may not start
+    bool reserved = false;      // a zone-counter reservation row is held for this run
     bool started = false;       // session initialised for this bot
 };
 

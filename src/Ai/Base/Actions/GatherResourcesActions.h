@@ -49,7 +49,9 @@ private:
     void AddZone(GatherResourcesSession& session, uint32 mapId, float x, float y, float z, uint32 tier,
                  bool isSkin);
     bool PickDestination(GatherResourcesSession& session);
-    uint32 BotsFarmingZone(GatherZone const& zone, uint32 skillId);
+    uint32 BotsFarmingZone(GatherResourcesSession& session, GatherZone const& zone);
+    void ReserveZone(GatherResourcesSession& session);
+    void ReleaseReservation(GatherResourcesSession& session);
 
     GameObject* FindNearestActiveNode(GatherResourcesSession& session);
     Creature* FindNearestSkinTarget(GatherResourcesSession& session);

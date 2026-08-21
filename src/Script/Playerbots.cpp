@@ -17,6 +17,7 @@
 #include "PlayerbotAIConfig.h"
 #include "PlayerbotAuctionOperations.h"
 #include "PlayerbotCommandScript.h"
+#include "PlayerbotGatherRepository.h"
 #include "PlayerbotGuildMgr.h"
 #include "PlayerbotSpellRepository.h"
 #include "PlayerbotWorldThreadProcessor.h"
@@ -37,7 +38,15 @@ public:
                                            : 0);
         playerbotLoader.AddDatabase(PlayerbotsDatabase, "Playerbots");
 
-        return playerbotLoader.Load();
+        if (!playerbotLoader.Load())
+            return false;
+
+        // Gather-zone occupancy counters are transient: reset them on every
+        // server start so rows left behind by a previous session (crash,
+        // logout, teleport) do not inflate a zone's active bot count.
+        PlayerbotGatherRepository::Instance().Clear();
+
+        return true;
     }
 
     void OnDatabasesKeepAlive() override { PlayerbotsDatabase.KeepAlive(); }

@@ -25,9 +25,9 @@
 #include "NearestGameObjects.h"
 #include "ObjectMgr.h"
 #include "PlayerbotAIConfig.h"
+#include "PlayerbotGatherRepository.h"
 #include "Playerbots.h"
 #include "Random.h"
-#include "RandomPlayerbotMgr.h"
 #include "SharedDefines.h"
 #include "TravelMgr.h"
 
@@ -132,6 +132,7 @@ void GatherResourcesController::BeginSession(GatherResourcesSession& session)
     session.sessionStart = getMSTime();
     session.arrivedTime = 0;
     session.nextDecision = 0;
+    session.reserved = false;
     session.zones.clear();
     session.zoneIndex = 0;
     botAI->TellMaster("I'm heading out to gather some resources.");
@@ -197,7 +198,11 @@ void GatherResourcesController::HandleSelecting(GatherResourcesSession& session)
         for (auto const& itr : sObjectMgr->GetAllGOData())
         {
             GameObjectData const gd = itr.second;
-            LockEntry const* lockInfo = sLockStore.LookupEntry(gd.GetLockId());
+            GameObjectTemplate const* gt = sObjectMgr->GetGameObjectTemplate(gd.id);
+            if (!gt)
+                continue;
+
+            LockEntry const* lockInfo = sLockStore.LookupEntry(gt->GetLockId());
             if (!lockInfo)
                 continue;
 
@@ -273,7 +278,11 @@ void GatherResourcesController::FillCandidateZones(GatherResourcesSession& sessi
         for (auto const& itr : sObjectMgr->GetAllGOData())
         {
             GameObjectData const gd = itr.second;
-            LockEntry const* lock = sLockStore.LookupEntry(gd.GetLockId());
+            GameObjectTemplate const* gt = sObjectMgr->GetGameObjectTemplate(gd.id);
+            if (!gt)
+                continue;
+
+            LockEntry const* lock = sLockStore.LookupEntry(gt->GetLockId());
             if (!lock)
                 continue;
 
@@ -337,7 +346,7 @@ bool GatherResourcesController::PickDestination(GatherResourcesSession& session)
     for (size_t i = 0; i < session.zones.size(); ++i)
     {
         GatherZone& zone = session.zones[i];
-        if (BotsFarmingZone(zone, session.skillId) >= sPlayerbotAIConfig.gatherResourceMaxBotsPerZone)
+        if (BotsFarmingZone(session, zone) >= sPlayerbotAIConfig.gatherResourceMaxBotsPerZone)
             continue;
 
         session.zoneId = zone.zoneId;
@@ -346,31 +355,32 @@ bool GatherResourcesController::PickDestination(GatherResourcesSession& session)
         session.zoneY = zone.y;
         session.zoneZ = zone.z;
         session.zoneIndex = i + 1;
+        ReserveZone(session);
         return true;
     }
 
     return false;
 }
 
-uint32 GatherResourcesController::BotsFarmingZone(GatherZone const& zone, uint32 skillId)
+uint32 GatherResourcesController::BotsFarmingZone(GatherResourcesSession& session, GatherZone const& zone)
 {
-    uint32 count = 0;
-    ObjectGuid self = bot->GetGUID();
+    return PlayerbotGatherRepository::Instance().GetCount(session.skillId, zone.zoneId);
+}
 
-    for (auto& entry : sRandomPlayerbotMgr.GetAllBots())
-    {
-        Player* pb = entry.second;
-        if (!pb || pb->GetGUID() == self)
-            continue;
+void GatherResourcesController::ReserveZone(GatherResourcesSession& session)
+{
+    PlayerbotGatherRepository::Instance().Reserve(bot->GetGUID().GetCounter(), session.skillId, session.zoneId,
+                                                  session.zoneMapId);
+    session.reserved = true;
+}
 
-        if (!pb->HasSkill((SkillType)skillId))
-            continue;
+void GatherResourcesController::ReleaseReservation(GatherResourcesSession& session)
+{
+    if (!session.reserved)
+        return;
 
-        if (pb->GetZoneId() == zone.zoneId)
-            ++count;
-    }
-
-    return count;
+    PlayerbotGatherRepository::Instance().Release(bot->GetGUID().GetCounter());
+    session.reserved = false;
 }
 
 void GatherResourcesController::HandleTravelling(GatherResourcesSession& session)
@@ -587,6 +597,7 @@ bool GatherResourcesController::TimedOut(GatherResourcesSession& session)
 
 void GatherResourcesController::FinishSessionForRetry(GatherResourcesSession& session)
 {
+    ReleaseReservation(session);
     session.state = GR_STATE_DISABLED;
     session.zones.clear();
     session.zoneIndex = 0;
