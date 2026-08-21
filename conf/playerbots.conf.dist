@@ -714,6 +714,43 @@ AiPlayerbot.GatherLevelingDurationMinutes = 30
 # Default: 100
 AiPlayerbot.GatherLevelingSearchRadius = 100.0
 
+# Which downtime gathering behaviour a bot may run, so the two never run at the
+# same time (a bot only ever schedules one gather activity):
+#   0 = 'gather leveling' only (visit trainers, level the profession)
+#   1 = 'gather resources' only (zone-routed mining/herbalism/skinning)
+#   2 = either, picked per-bot at creation
+# Default: 2
+AiPlayerbot.GatherActivityMode = 2
+
+# Enable the 'gather resources' downtime behaviour: a bot travels to the closest
+# zone holding a chosen profession resource tier and gathers nodes / monsters
+# there for the configured duration (or until its bag soft-cap), then returns to
+# its next idle priority. Default: 1 (enabled)
+AiPlayerbot.GatherResourcesEnabled = 1
+
+# Percent chance (0-100) that the bot picks the HIGHEST gather tier it can gather
+# instead of a random tier. 50 = both options equally likely.
+# Default: 50
+AiPlayerbot.GatherResourceHighestPriorityPercent = 50
+
+# How long a gather run lasts (minutes). The timer only starts once the bot
+# arrives at the target zone (travel / roam-through time is not counted).
+# Default: 30
+AiPlayerbot.GatherResourceDurationMinutes = 30
+
+# Max other bots already farming the same resource type in a zone before the bot
+# reroutes to the next-closest zone holding that tier.
+# Default: 3
+AiPlayerbot.GatherResourceMaxBotsPerZone = 3
+
+# Bag soft-cap: stop gathering once used inventory slots reach this % of the
+# backpack's total capacity. Default: 20
+AiPlayerbot.GatherResourceBagSoftCapPercent = 20
+
+# Cooldown (minutes) between two gather runs so other downtime activities get a
+# turn between sessions. Default: 15
+AiPlayerbot.GatherResourceCooldownMinutes = 15
+
 # Enable the 'auction' behaviour: bots actively list saleable goods (gathering
 # resources, cloth, trade goods) on the auction house instead of vendoring them.
 # Only randombots participate (their AI runs on the world thread, two side

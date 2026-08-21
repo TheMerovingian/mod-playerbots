@@ -326,6 +326,20 @@ public:
     uint32 gatherLevelingDurationMinutes;
     float gatherLevelingSearchRadius;
 
+    // Which downtime gathering behaviour a bot may run, so the two never run at
+    // once: 0 = profession levelling, 1 = zone-routed resource gathering,
+    // 2 = either (picked per bot at creation).
+    uint32 gatherActivityMode;
+
+    // "gather resources" downtime behaviour: bots travel to the closest zone
+    // holding a chosen profession resource tier and farm nodes / monsters.
+    bool gatherResourcesEnabled;
+    uint32 gatherResourceHighestPriorityPercent;
+    uint32 gatherResourceDurationMinutes;
+    uint32 gatherResourceMaxBotsPerZone;
+    uint32 gatherResourceBagSoftCapPercent;
+    uint32 gatherResourceCooldownMinutes;
+
     bool auctionEnabled;
     uint32 auctionWindowSeconds;
     uint32 auctionStartMultiplier;

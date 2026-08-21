@@ -25,6 +25,7 @@
 #include "FocusTargetStrategy.h"
 #include "FollowMasterStrategy.h"
 #include "GatheringLevelingStrategy.h"
+#include "GatherResourcesStrategy.h"
 #include "GrindingStrategy.h"
 #include "GroupStrategy.h"
 #include "GuardStrategy.h"
@@ -67,6 +68,7 @@ public:
         creators["loot"] = &StrategyContext::loot;
         creators["gather"] = &StrategyContext::gather;
         creators["gather leveling"] = &StrategyContext::gather_leveling;
+        creators["gather resources"] = &StrategyContext::gather_resources;
         creators["auction"] = &StrategyContext::auction;
         creators["emote"] = &StrategyContext::emote;
         creators["passive"] = &StrategyContext::passive;
@@ -156,6 +158,7 @@ private:
     static Strategy* loot(PlayerbotAI* botAI) { return new LootNonCombatStrategy(botAI); }
     static Strategy* gather(PlayerbotAI* botAI) { return new GatherStrategy(botAI); }
     static Strategy* gather_leveling(PlayerbotAI* botAI) { return new GatheringLevelingStrategy(botAI); }
+    static Strategy* gather_resources(PlayerbotAI* botAI) { return new GatherResourcesStrategy(botAI); }
     static Strategy* auction(PlayerbotAI* botAI) { return new AuctionStrategy(botAI); }
     static Strategy* emote(PlayerbotAI* botAI) { return new EmoteStrategy(botAI); }
     static Strategy* passive(PlayerbotAI* botAI) { return new PassiveStrategy(botAI); }

@@ -181,6 +181,19 @@ bool PlayerbotAIConfig::Initialize()
     gatherLevelingEnabled = sConfigMgr->GetOption<bool>("AiPlayerbot.GatherLevelingEnabled", true);
     gatherLevelingDurationMinutes = sConfigMgr->GetOption<int32>("AiPlayerbot.GatherLevelingDurationMinutes", 30);
     gatherLevelingSearchRadius = sConfigMgr->GetOption<float>("AiPlayerbot.GatherLevelingSearchRadius", 100.0f);
+    gatherActivityMode = sConfigMgr->GetOption<int32>("AiPlayerbot.GatherActivityMode", 2);
+
+    gatherResourcesEnabled = sConfigMgr->GetOption<bool>("AiPlayerbot.GatherResourcesEnabled", true);
+    gatherResourceHighestPriorityPercent =
+        sConfigMgr->GetOption<int32>("AiPlayerbot.GatherResourceHighestPriorityPercent", 50);
+    gatherResourceDurationMinutes =
+        sConfigMgr->GetOption<int32>("AiPlayerbot.GatherResourceDurationMinutes", 30);
+    gatherResourceMaxBotsPerZone =
+        sConfigMgr->GetOption<int32>("AiPlayerbot.GatherResourceMaxBotsPerZone", 3);
+    gatherResourceBagSoftCapPercent =
+        sConfigMgr->GetOption<int32>("AiPlayerbot.GatherResourceBagSoftCapPercent", 20);
+    gatherResourceCooldownMinutes =
+        sConfigMgr->GetOption<int32>("AiPlayerbot.GatherResourceCooldownMinutes", 15);
 
     auctionEnabled = sConfigMgr->GetOption<bool>("AiPlayerbot.AuctionEnabled", true);
     auctionWindowSeconds = sConfigMgr->GetOption<uint32>("AiPlayerbot.AuctionWindowSeconds", 30);
