@@ -9,6 +9,7 @@
 
 #include "CureTriggers.h"
 #include "FishingTriggers.h"
+#include "GatheringLevelingTriggers.h"
 #include "GenericTriggers.h"
 #include "GuildTriggers.h"
 #include "HealthTriggers.h"
@@ -176,6 +177,7 @@ public:
         creators["near rpg target"] = &TriggerContext::near_rpg_target;
         creators["no travel target"] = &TriggerContext::no_travel_target;
         creators["far from travel target"] = &TriggerContext::far_from_travel_target;
+        creators["need gather leveling"] = &TriggerContext::need_gather_leveling;
         creators["no rti target"] = &TriggerContext::no_rti;
 
         creators["give food"] = &TriggerContext::give_food;
@@ -260,6 +262,7 @@ private:
     static Trigger* near_rpg_target(PlayerbotAI* botAI) { return new NearRpgTargetTrigger(botAI); }
     static Trigger* far_from_travel_target(PlayerbotAI* botAI) { return new FarFromTravelTargetTrigger(botAI); }
     static Trigger* no_travel_target(PlayerbotAI* botAI) { return new NoTravelTargetTrigger(botAI); }
+    static Trigger* need_gather_leveling(PlayerbotAI* botAI) { return new NeedGatheringLevelingTrigger(botAI); }
     static Trigger* no_rpg_target(PlayerbotAI* botAI) { return new NoRpgTargetTrigger(botAI); }
     static Trigger* has_rpg_target(PlayerbotAI* botAI) { return new HasRpgTargetTrigger(botAI); }
     static Trigger* collision(PlayerbotAI* botAI) { return new CollisionTrigger(botAI); }

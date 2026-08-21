@@ -2754,8 +2754,30 @@ bool PlayerbotFactory::CanEquipUnseenItem(uint8 slot, uint16& dest, uint32 item)
 
 void PlayerbotFactory::InitTradeSkills()
 {
+    // Every bot gets a random collecting (gathering) profession on instantiation.
+    // Non-randombots (altbots / addclass-created bots) only get the single random
+    // gathering profession; randombots run the full pair selection below (every
+    // class/random pair already includes at least one gathering skill).
     if (!sRandomPlayerbotMgr.IsRandomBot(bot))
+    {
+        // Ensure the bot has a collecting profession (idempotent: only assign
+        // when none of the three gathering skills are already known).
+        bool hasGathering = bot->HasSkill(SKILL_HERBALISM) || bot->HasSkill(SKILL_MINING) ||
+                            bot->HasSkill(SKILL_SKINNING);
+        if (!hasGathering && bot->GetFreePrimaryProfessionPoints() > 0)
+        {
+            static constexpr std::array<uint16, 3> GatheringSkills = {
+                {SKILL_HERBALISM, SKILL_MINING, SKILL_SKINNING}};
+
+            uint16 gatherSkill = GatheringSkills[urand(0, GatheringSkills.size() - 1)];
+            SetRandomSkill(gatherSkill);
+            uint32 starterSpell = GetProfessionStarterSpell(gatherSkill);
+            if (starterSpell && !bot->HasSpell(starterSpell))
+                bot->learnSpell(starterSpell, false);
+        }
+
         return;
+    }
 
     uint32 const maxPrimaryTradeSkills =
         std::min<uint32>(2, sWorld->getIntConfig(CONFIG_MAX_PRIMARY_TRADE_SKILL));
@@ -2838,6 +2860,13 @@ void PlayerbotFactory::InitTradeSkills()
     for (uint16 skillId : skillsToLearn)
     {
         uint32 spellId = GetProfessionStarterSpell(skillId);
+
+        // Enchanting bots also need the Disenchant ability (13262), which is a
+        // separate spell from the Enchanting skill - without it the bot can
+        // never disenchant BoE greens down to trade materials.
+        if (skillId == SKILL_ENCHANTING && !bot->HasSpell(13262))
+            bot->learnSpell(13262, false);
+
         if (!spellId || bot->HasSpell(spellId))
             continue;
 

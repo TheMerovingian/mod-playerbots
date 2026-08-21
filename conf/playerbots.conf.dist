@@ -695,6 +695,64 @@ AiPlayerbot.FishingDistance = 40.0
 # Distance from water (in yards) beyond which a bot will remove the 'master fishing' strategy
 AiPlayerbot.EndFishingWithMaster = 30.0
 
+####################################################################################################
+# GATHER LEVELING
+#
+
+# Enable the 'gather leveling' behaviour: bots proactively level their collecting
+# profession (mining / herbalism / skinning) by visiting trainers and roaming zones
+# to harvest nodes. Every bot is assigned a random collecting profession on creation.
+# Default: 1 (enabled)
+AiPlayerbot.GatherLevelingEnabled = 1
+
+# Max minutes the behaviour runs before the bot stops levelling its profession,
+# even if it is not maxed yet.
+# Default: 30
+AiPlayerbot.GatherLevelingDurationMinutes = 30
+
+# Radius (yards) within which a bot searches for a relevant profession trainer.
+# Default: 100
+AiPlayerbot.GatherLevelingSearchRadius = 100.0
+
+# Enable the 'auction' behaviour: bots actively list saleable goods (gathering
+# resources, cloth, trade goods) on the auction house instead of vendoring them.
+# Only randombots participate (their AI runs on the world thread, two side
+# interaction aside from regular player auctions).
+# Default: 1 (enabled)
+AiPlayerbot.AuctionEnabled = 1
+
+# Size (seconds) of the chained time window used to measure auction demand. Every
+# completed sale in a chain of sales where each neighbouring sale is within this
+# window of the previous one adds one silver to the computed listing price.
+# Default: 30
+AiPlayerbot.AuctionWindowSeconds = 30
+
+# When no previous sale for an item is recorded, the listing price is seeded at
+# this multiple of the item's vendor sell value.
+# Default: 5
+AiPlayerbot.AuctionStartMultiplier = 5
+
+# Buyout price is set to this multiple of the computed listing price.
+# Default: 2
+AiPlayerbot.AuctionBuyoutMultiplier = 2
+
+# Percent to increase the base unit price when the last recorded sale of the
+# item took less than a day to sell.
+# Default: 10
+AiPlayerbot.AuctionIncreasePercent = 10
+
+# Percent to decrease the base unit price when the last recorded sale of the
+# item took longer than a day to sell.
+# Default: 10
+AiPlayerbot.AuctionDecreasePercent = 10
+
+# Full stacks of a combat consumable (ammo, poisons, sharpening stones) or a
+# profession trade material (ores, herbs, cloth) a bot always keeps. For trade
+# goods the retained stock is used for the bot's own profession crafting; only
+# the excess is auctioned, so bots keep enough to craft with.
+# Default: 3
+AiPlayerbot.AuctionKeepStacks = 3
+
 #
 #
 ####################################################################################################

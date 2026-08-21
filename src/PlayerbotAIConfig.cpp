@@ -178,6 +178,17 @@ bool PlayerbotAIConfig::Initialize()
     randomBotRpgChance = sConfigMgr->GetOption<float>("AiPlayerbot.RandomBotRpgChance", 0.20f);
 
     iterationsPerTick = sConfigMgr->GetOption<int32>("AiPlayerbot.IterationsPerTick", 10);
+    gatherLevelingEnabled = sConfigMgr->GetOption<bool>("AiPlayerbot.GatherLevelingEnabled", true);
+    gatherLevelingDurationMinutes = sConfigMgr->GetOption<int32>("AiPlayerbot.GatherLevelingDurationMinutes", 30);
+    gatherLevelingSearchRadius = sConfigMgr->GetOption<float>("AiPlayerbot.GatherLevelingSearchRadius", 100.0f);
+
+    auctionEnabled = sConfigMgr->GetOption<bool>("AiPlayerbot.AuctionEnabled", true);
+    auctionWindowSeconds = sConfigMgr->GetOption<uint32>("AiPlayerbot.AuctionWindowSeconds", 30);
+    auctionStartMultiplier = sConfigMgr->GetOption<uint32>("AiPlayerbot.AuctionStartMultiplier", 5);
+    auctionBuyoutMultiplier = sConfigMgr->GetOption<uint32>("AiPlayerbot.AuctionBuyoutMultiplier", 2);
+    auctionIncreasePercent = sConfigMgr->GetOption<uint32>("AiPlayerbot.AuctionIncreasePercent", 10);
+    auctionDecreasePercent = sConfigMgr->GetOption<uint32>("AiPlayerbot.AuctionDecreasePercent", 10);
+    auctionKeepStacks = sConfigMgr->GetOption<uint32>("AiPlayerbot.AuctionKeepStacks", 3);
 
     allowAccountBots = sConfigMgr->GetOption<bool>("AiPlayerbot.AllowAccountBots", true);
     allowGuildBots = sConfigMgr->GetOption<bool>("AiPlayerbot.AllowGuildBots", true);

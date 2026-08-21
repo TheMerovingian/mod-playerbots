@@ -10,6 +10,8 @@
 #include "ItemUsageValue.h"
 #include "ItemVisitors.h"
 #include "Playerbots.h"
+#include "PlayerbotAIConfig.h"
+#include "ItemPackets.h"
 
 class SellItemsVisitor : public IterateItemsVisitor
 {
@@ -51,6 +53,11 @@ public:
     {
         ItemUsage usage = context->GetValue<ItemUsage>("item usage", item->GetEntry())->Get();
         if (usage != ITEM_USAGE_VENDOR && usage != ITEM_USAGE_AH)
+            return true;
+
+        // When the AH behaviour is on, saleable goods are posted on the auction
+        // house instead of vendored - leave them for AuctionSellAction.
+        if (usage == ITEM_USAGE_AH && sPlayerbotAIConfig.auctionEnabled)
             return true;
 
         return SellItemsVisitor::Visit(item);

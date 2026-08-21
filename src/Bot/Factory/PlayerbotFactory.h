@@ -92,6 +92,7 @@ public:
     void InitReputation();
     void InitAttunementQuests();
     void InitGuild();
+    static uint32 GetProfessionStarterSpell(uint16 skillId);
 
 private:
     enum class ProfessionSpecializationSpell : uint32
@@ -160,7 +161,6 @@ private:
     static bool IsPrimaryTradeSkill(uint16 skillId);
     static bool IsGatheringTradeSkill(uint16 skillId);
     static bool IsCraftingTradeSkill(uint16 skillId);
-    static uint32 GetProfessionStarterSpell(uint16 skillId);
     static std::vector<WeightedProfessionPair> GetClassProfessionPairs(Player* bot);
     static std::vector<WeightedProfessionPair> GetRandomProfessionPairs();
     static std::pair<uint16, uint16> ChooseProfessionPair(std::vector<WeightedProfessionPair> const& professionPairs);

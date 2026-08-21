@@ -31,6 +31,7 @@
 #include "EstimatedLifetimeValue.h"
 #include "FishValues.h"
 #include "Formations.h"
+#include "GatheringSessionValue.h"
 #include "GrindTargetValue.h"
 #include "GroupLeaderValue.h"
 #include "GroupValues.h"
@@ -334,6 +335,7 @@ public:
         creators["fishing spot"] = &ValueContext::fishing_spot;
         creators["wait for attack time"] = &ValueContext::wait_for_attack_time;
         creators["combat start time"] = &ValueContext::combat_start_time;
+        creators["gathering session"] = &ValueContext::gathering_session;
     }
 
 private:
@@ -594,6 +596,7 @@ private:
     }
     static UntypedValue* wait_for_attack_time(PlayerbotAI* botAI) { return new WaitForAttackTimeValue(botAI); }
     static UntypedValue* combat_start_time(PlayerbotAI* botAI) { return new CombatStartTimeValue(botAI); }
+    static UntypedValue* gathering_session(PlayerbotAI* botAI) { return new GatheringSessionValue(botAI); }
 };
 
 #endif

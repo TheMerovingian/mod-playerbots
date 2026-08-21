@@ -585,6 +585,15 @@ void AiFactory::AddDefaultNonCombatStrategies(Player* player, PlayerbotAI* const
                                             "gather", "duel", "pvp", "buff", "mount", "emote", nullptr);
     }
 
+    // Level the bot's collecting profession (mining / herbalism / skinning).
+    if (sPlayerbotAIConfig.gatherLevelingEnabled &&
+        (player->HasSkill(SKILL_MINING) || player->HasSkill(SKILL_HERBALISM) || player->HasSkill(SKILL_SKINNING)))
+        nonCombatEngine->addStrategy("gather leveling", false);
+
+    // Post saleable goods (gathering resources, cloth, trade goods) on the AH.
+    if (sPlayerbotAIConfig.auctionEnabled)
+        nonCombatEngine->addStrategy("auction", false);
+
     if (sPlayerbotAIConfig.autoSaveMana && PlayerbotAI::IsHeal(player, true))
         nonCombatEngine->addStrategy("save mana", false);
 

@@ -5,6 +5,8 @@
 
 #include "Playerbots.h"
 #include "BattleGroundTactics.h"
+
+#include "AuctionHouseScript.h"
 #include "BattlefieldScript.h"
 #include "Channel.h"
 #include "Config.h"
@@ -13,6 +15,7 @@
 #include "GuildTaskMgr.h"
 #include "PlayerScript.h"
 #include "PlayerbotAIConfig.h"
+#include "PlayerbotAuctionOperations.h"
 #include "PlayerbotCommandScript.h"
 #include "PlayerbotGuildMgr.h"
 #include "PlayerbotSpellRepository.h"
@@ -510,6 +513,28 @@ public:
 
 void AddPlayerbotsSecureLoginScripts();
 
+class PlayerbotAuctionHouseScript : public AuctionHouseScript
+{
+public:
+    PlayerbotAuctionHouseScript() : AuctionHouseScript("PlayerbotAuctionHouseScript",
+                                                       {AUCTIONHOUSEHOOK_ON_AUCTION_SUCCESSFUL}) {}
+
+    // Fired on the world thread when an auction sells (even if the owner is
+    // offline). For playerbot-owned listings we record the sale and refresh the
+    // demand-driven pricing. The DB write is deferred to the world-thread
+    // operation queue to serialise with the rest of the bot's world work.
+    void OnAuctionSuccessful(AuctionHouseObject* /*ah*/, AuctionEntry* auction) override
+    {
+        uint32 const ownerLow = auction->owner.GetCounter();
+        if (!sRandomPlayerbotMgr.IsRandomBot(ownerLow))
+            return;
+
+        auto op = std::make_unique<AuctionSaleOperation>(auction->Id, auction->item_template, auction->bid,
+                                                         ownerLow, static_cast<uint32>(auction->expire_time));
+        PlayerbotWorldThreadProcessor::instance().QueueOperation(std::move(op));
+    }
+};
+
 void AddSC_MagtheridonBotScripts();
 void AddSC_TempestKeepBotScripts();
 void AddSC_HyjalSummitBotScripts();
@@ -526,6 +551,7 @@ void AddPlayerbotsScripts()
     new PlayerbotsServerScript();
     new PlayerbotsWorldScript();
     new PlayerbotsScript();
+    new PlayerbotAuctionHouseScript();
     new PlayerBotsBGScript();
     AddPlayerbotsSecureLoginScripts();
     AddPlayerbotsCommandscripts();

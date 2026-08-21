@@ -9,6 +9,9 @@
 
 #include "AddLootAction.h"
 #include "AttackAction.h"
+#include "AuctionSellAction.h"
+#include "ShareQuestAction.h"
+#include "BattleGroundTactics.h"
 #include "AutoMaintenanceOnLevelupAction.h"
 #include "BattleGroundJoinAction.h"
 #include "BattleGroundTactics.h"
@@ -29,6 +32,7 @@
 #include "EmoteAction.h"
 #include "FishingAction.h"
 #include "FollowActions.h"
+#include "GatheringLevelingActions.h"
 #include "GenericActions.h"
 #include "GenericSpellActions.h"
 #include "GiveItemAction.h"
@@ -86,6 +90,8 @@ public:
         creators["travel"] = &ActionContext::travel;
         creators["choose travel target"] = &ActionContext::choose_travel_target;
         creators["move to travel target"] = &ActionContext::move_to_travel_target;
+        creators["gather leveling update"] = &ActionContext::gather_leveling_update;
+        creators["auction sell"] = &ActionContext::auction_sell;
         creators["move out of collision"] = &ActionContext::move_out_of_collision;
         creators["move random"] = &ActionContext::move_random;
         creators["attack"] = &ActionContext::melee;
@@ -351,6 +357,8 @@ private:
     static Action* move_from_group(PlayerbotAI* botAI) { return new MoveFromGroupAction(botAI); }
     static Action* flee_to_group_leader(PlayerbotAI* botAI) { return new FleeToGroupLeaderAction(botAI); }
     static Action* add_gathering_loot(PlayerbotAI* botAI) { return new AddGatheringLootAction(botAI); }
+    static Action* gather_leveling_update(PlayerbotAI* botAI) { return new GatheringLevelingUpdateAction(botAI); }
+    static Action* auction_sell(PlayerbotAI* botAI) { return new AuctionSellAction(botAI); }
     static Action* add_loot(PlayerbotAI* botAI) { return new AddLootAction(botAI); }
     static Action* add_all_loot(PlayerbotAI* botAI) { return new AddAllLootAction(botAI); }
     static Action* loot(PlayerbotAI* botAI) { return new LootAction(botAI); }

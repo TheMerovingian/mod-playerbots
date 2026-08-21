@@ -322,6 +322,18 @@ public:
 
     uint32 iterationsPerTick;
 
+    bool gatherLevelingEnabled;
+    uint32 gatherLevelingDurationMinutes;
+    float gatherLevelingSearchRadius;
+
+    bool auctionEnabled;
+    uint32 auctionWindowSeconds;
+    uint32 auctionStartMultiplier;
+    uint32 auctionBuyoutMultiplier;
+    uint32 auctionIncreasePercent;
+    uint32 auctionDecreasePercent;
+    uint32 auctionKeepStacks;
+
     std::mutex m_logMtx;
     bool enableAutoTradeOnItemMention;
     std::vector<std::string> tradeActionExcludedPrefixes;
