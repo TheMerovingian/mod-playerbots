@@ -26,6 +26,7 @@
 #include "ObjectMgr.h"
 #include "PlayerbotAIConfig.h"
 #include "PlayerbotGatherRepository.h"
+#include "PlayerbotSkinRepository.h"
 #include "Playerbots.h"
 #include "Random.h"
 #include "SharedDefines.h"
@@ -33,13 +34,6 @@
 
 namespace
 {
-    // Same skinning-requirement formula the core loot/bag code applies:
-    // sub-10 beasts need no skill, 10-19 ramp by *10, 20+ require level*5.
-    uint32 SkinTierFromLevel(uint32 level)
-    {
-        return level < 10 ? 1 : level < 20 ? (level - 10) * 10 : level * 5;
-    }
-
     // Scans the bot's surroundings for both gathering game objects and living
     // units (the skinning loop hunts skinnable creatures). Mirrors the node scan
     // of RevealGatheringItemAction and the creature scan of nearest-corpses.
@@ -133,6 +127,7 @@ void GatherResourcesController::BeginSession(GatherResourcesSession& session)
     session.arrivedTime = 0;
     session.nextDecision = 0;
     session.reserved = false;
+    session.skinMonsters.clear();
     session.zones.clear();
     session.zoneIndex = 0;
     botAI->TellMaster("I'm heading out to gather some resources.");
@@ -181,17 +176,11 @@ void GatherResourcesController::HandleSelecting(GatherResourcesSession& session)
     std::set<uint32> tiers;
     if (IsSkinningSkill(session.skillId))
     {
-        for (auto const& itr : sObjectMgr->GetAllCreatureData())
-        {
-            CreatureData const& cd = itr.second;
-            CreatureTemplate const* ct = sObjectMgr->GetCreatureTemplate(cd.id);
-            if (!ct || ct->GetRequiredLootSkill() != SKILL_SKINNING || !ct->SkinLootId)
-                continue;
-
-            uint32 tier = SkinTierFromLevel(ct->minlevel);
+        // Skin tiers come from the prebuilt playerbots_skin index (no full scan
+        // of creature data); only keep ones the bot's skinning rank can handle.
+        for (uint32 tier : PlayerbotSkinRepository::Instance().GetSkinTiers())
             if (bot->GetSkillValue(session.skillId) >= tier)
                 tiers.insert(tier);
-        }
     }
     else
     {
@@ -259,19 +248,22 @@ void GatherResourcesController::FillCandidateZones(GatherResourcesSession& sessi
 {
     if (IsSkinningSkill(session.skillId))
     {
-        for (auto const& itr : sObjectMgr->GetAllCreatureData())
+        // Zones holding the chosen skin tier, read from the playerbots_skin
+        // index (nearest representative spawn per zone) instead of a scan.
+        for (PlayerbotSkinZone const& zone : PlayerbotSkinRepository::Instance().GetZonesByTier(session.tier))
         {
-            CreatureData const& cd = itr.second;
-            CreatureTemplate const* ct = sObjectMgr->GetCreatureTemplate(cd.id);
-            if (!ct || ct->GetRequiredLootSkill() != SKILL_SKINNING || !ct->SkinLootId)
-                continue;
-
-            uint32 tier = SkinTierFromLevel(ct->minlevel);
-            if (tier != session.tier)
-                continue;
-
-            AddZone(session, cd.mapid, cd.posX, cd.posY, cd.posZ, tier, true);
+            GatherZone gz;
+            gz.zoneId = zone.zoneId;
+            gz.mapId = zone.mapId;
+            gz.tier = zone.tier;
+            gz.x = zone.x;
+            gz.y = zone.y;
+            gz.z = zone.z;
+            gz.isSkinning = true;
+            session.zones.push_back(gz);
         }
+
+        return;
     }
     else
     {
@@ -506,6 +498,18 @@ GameObject* GatherResourcesController::FindNearestActiveNode(GatherResourcesSess
 
 Creature* GatherResourcesController::FindNearestSkinTarget(GatherResourcesSession& session)
 {
+    // Resolve the monsters to hunt in this zone from the prebuilt index once,
+    // then target the nearest live instance of those entries (no per-tick
+    // creature-template lookups / data scans).
+    if (session.skinMonsters.empty())
+    {
+        for (uint32 monster : PlayerbotSkinRepository::Instance().GetMonstersInZone(session.zoneId, session.tier))
+            session.skinMonsters.insert(monster);
+
+        if (session.skinMonsters.empty())
+            return nullptr;
+    }
+
     std::list<Unit*> units;
     AnyGatherTargetInObjectRangeCheck u_check(bot, sPlayerbotAIConfig.grindDistance);
     Acore::UnitListSearcher<AnyGatherTargetInObjectRangeCheck> searcher(bot, units, u_check);
@@ -519,12 +523,7 @@ Creature* GatherResourcesController::FindNearestSkinTarget(GatherResourcesSessio
         if (!creature || !creature->IsAlive())
             continue;
 
-        CreatureTemplate const* ct = creature->GetCreatureTemplate();
-        if (!ct || ct->GetRequiredLootSkill() != SKILL_SKINNING || !ct->SkinLootId)
-            continue;
-
-        uint32 tier = SkinTierFromLevel(creature->GetLevel());
-        if (tier != session.tier)
+        if (session.skinMonsters.find(creature->GetEntry()) == session.skinMonsters.end())
             continue;
 
         float dist = bot->GetDistance(creature);

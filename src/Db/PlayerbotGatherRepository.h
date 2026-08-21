@@ -9,6 +9,8 @@
 
 #include <cstdint>
 
+#include "Define.h"
+
 // Database-backed gather-zone occupancy tracker. Replaces the per-tick in-memory
 // scan over all bots (RandomPlayerbotMgr) that the 'gather resources' behaviour
 // used to determine how many bots were farming a zone. Each active bot holds a

@@ -9,6 +9,7 @@
 
 #include "Value.h"
 
+#include <unordered_set>
 #include <vector>
 
 // Finite state machine driving the "gather resources" behaviour. Stored per bot
@@ -47,6 +48,7 @@ struct GatherResourcesSession
     float zoneX = 0.0f;      // selected destination fly-to point
     float zoneY = 0.0f;
     float zoneZ = 0.0f;
+    std::unordered_set<uint32> skinMonsters;  // (skinning) monster entries to hunt in the zone
     uint32 sessionStart = 0;    // getMSTime() when session began
     uint32 arrivedTime = 0;     // getMSTime() when bot reached the zone (timer start)
     uint32 nextDecision = 0;    // throttle between gathering decisions

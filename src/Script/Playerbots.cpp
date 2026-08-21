@@ -19,6 +19,7 @@
 #include "PlayerbotCommandScript.h"
 #include "PlayerbotGatherRepository.h"
 #include "PlayerbotGuildMgr.h"
+#include "PlayerbotSkinRepository.h"
 #include "PlayerbotSpellRepository.h"
 #include "PlayerbotWorldThreadProcessor.h"
 #include "RandomPlayerbotMgr.h"
@@ -371,6 +372,14 @@ public:
         LOG_INFO("server.loading", " ");
 
         PlayerbotSpellRepository::Instance().Initialize();
+
+        // Build the zone / leather / monster skinning index from the creature
+        // spawn data (loaded by now). This is the initial (and every-boot)
+        // population mechanism for the skinning index behind the 'gather
+        // resources' behaviour.
+        uint32 skinBuildMSTime = getMSTime();
+        PlayerbotSkinRepository::Instance().Repopulate();
+        LOG_INFO("server.loading", ">> Built playerbots skin index in {} ms", GetMSTimeDiffToNow(skinBuildMSTime));
 
         LOG_INFO("server.loading", "Playerbots World Thread Processor initialized");
     }
