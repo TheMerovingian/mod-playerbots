@@ -76,7 +76,7 @@ void PlayerbotSkinRepository::Repopulate()
 std::vector<uint32> PlayerbotSkinRepository::GetSkinTiers()
 {
     std::vector<uint32> tiers;
-    QueryResult result = PlayerbotsDatabase.Query(PlayerbotsDatabase.GetPreparedStatement(PLAYERBOTS_SEL_SKIN_TIERS));
+    PreparedQueryResult result = PlayerbotsDatabase.Query(PlayerbotsDatabase.GetPreparedStatement(PLAYERBOTS_SEL_SKIN_TIERS));
     if (!result)
         return tiers;
 
@@ -96,7 +96,7 @@ std::vector<PlayerbotSkinZone> PlayerbotSkinRepository::GetZonesByTier(uint32 ti
 
     PlayerbotsDatabasePreparedStatement* stmt = PlayerbotsDatabase.GetPreparedStatement(PLAYERBOTS_SEL_SKIN_ZONES);
     stmt->SetData(0, tier);
-    QueryResult result = PlayerbotsDatabase.Query(stmt);
+    PreparedQueryResult result = PlayerbotsDatabase.Query(stmt);
     if (!result)
         return zones;
 
@@ -127,7 +127,7 @@ std::vector<uint32> PlayerbotSkinRepository::GetMonstersInZone(uint32 zoneId, ui
     PlayerbotsDatabasePreparedStatement* stmt = PlayerbotsDatabase.GetPreparedStatement(PLAYERBOTS_SEL_SKIN_MONSTERS);
     stmt->SetData(0, zoneId);
     stmt->SetData(1, tier);
-    QueryResult result = PlayerbotsDatabase.Query(stmt);
+    PreparedQueryResult result = PlayerbotsDatabase.Query(stmt);
     if (!result)
         return monsters;
 
@@ -147,7 +147,7 @@ std::vector<uint32> PlayerbotSkinRepository::GetZonesByLeather(uint32 leatherId)
     PlayerbotsDatabasePreparedStatement* stmt =
         PlayerbotsDatabase.GetPreparedStatement(PLAYERBOTS_SEL_SKIN_ZONES_BY_LEATHER);
     stmt->SetData(0, leatherId);
-    QueryResult result = PlayerbotsDatabase.Query(stmt);
+    PreparedQueryResult result = PlayerbotsDatabase.Query(stmt);
     if (!result)
         return zones;
 

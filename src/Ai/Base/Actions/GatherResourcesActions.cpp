@@ -26,6 +26,7 @@
 #include "ObjectMgr.h"
 #include "PlayerbotAIConfig.h"
 #include "PlayerbotGatherRepository.h"
+#include "PlayerbotNodeRepository.h"
 #include "PlayerbotSkinRepository.h"
 #include "Playerbots.h"
 #include "Random.h"
@@ -184,40 +185,22 @@ void GatherResourcesController::HandleSelecting(GatherResourcesSession& session)
     }
     else
     {
-        for (auto const& itr : sObjectMgr->GetAllGOData())
-        {
-            GameObjectData const gd = itr.second;
-            GameObjectTemplate const* gt = sObjectMgr->GetGameObjectTemplate(gd.id);
-            if (!gt)
-                continue;
-
-            LockEntry const* lockInfo = sLockStore.LookupEntry(gt->GetLockId());
-            if (!lockInfo)
-                continue;
-
-            for (uint8 slot = 0; slot < 8; ++slot)
-            {
-                if (lockInfo->Type[slot] != LOCK_KEY_SKILL)
-                    continue;
-
-                uint32 skill = SkillByLockType(LockType(lockInfo->Index[slot]));
-                if (skill != session.skillId)
-                    continue;
-
-                uint32 tier = std::max(1u, lockInfo->Skill[slot]);
-                if (bot->GetSkillValue(session.skillId) >= tier)
-                    tiers.insert(tier);
-            }
-        }
+        // Node tiers come from the prebuilt playerbots_node index (no full scan
+        // of gameobject data); only keep ones the bot's gathering skill can use.
+        for (uint32 tier : PlayerbotNodeRepository::Instance().GetNodeTiers(session.skillId))
+            if (bot->GetSkillValue(session.skillId) >= tier)
+                tiers.insert(tier);
     }
 
     if (tiers.empty())
     {
+        LOG_INFO("playerbots", "[gatherresD] no tiers skill={}", session.skillId);
         // No zone holds a node tier this bot can gather: leave the behaviour and
         // return the bot to its next priority.
         FinishSessionForRetry(session);
         return;
     }
+    LOG_INFO("playerbots", "[gatherresD] tiers={} skill={}", tiers.size(), session.skillId);
 
     // Choose tier: highest-available vs random, split by the configured percent.
     bool wantHighest = urand(0, 99) < sPlayerbotAIConfig.gatherResourceHighestPriorityPercent;
@@ -241,6 +224,8 @@ void GatherResourcesController::HandleSelecting(GatherResourcesSession& session)
     }
 
     session.state = GR_STATE_TRAVELLING;
+    LOG_INFO("playerbots", "[gatherresD] selected zone={} tier={} zones={}", session.zoneId, session.tier,
+             session.zones.size());
     botAI->TellMaster("Going to gather tier " + std::to_string(session.tier) + " resources.");
 }
 
@@ -267,58 +252,23 @@ void GatherResourcesController::FillCandidateZones(GatherResourcesSession& sessi
     }
     else
     {
-        for (auto const& itr : sObjectMgr->GetAllGOData())
+        // Zones holding the chosen node tier, read from the playerbots_node
+        // index (nearest representative spawn per zone) instead of a scan.
+        for (PlayerbotNodeZone const& zone : PlayerbotNodeRepository::Instance().GetZonesBySkillAndTier(session.skillId, session.tier))
         {
-            GameObjectData const gd = itr.second;
-            GameObjectTemplate const* gt = sObjectMgr->GetGameObjectTemplate(gd.id);
-            if (!gt)
-                continue;
-
-            LockEntry const* lock = sLockStore.LookupEntry(gt->GetLockId());
-            if (!lock)
-                continue;
-
-            for (uint8 slot = 0; slot < 8; ++slot)
-            {
-                if (lock->Type[slot] != LOCK_KEY_SKILL)
-                    continue;
-
-                uint32 skill = SkillByLockType(LockType(lock->Index[slot]));
-                if (skill != session.skillId)
-                    continue;
-
-                uint32 tier = std::max(1u, lock->Skill[slot]);
-                if (tier != session.tier)
-                    continue;
-
-                AddZone(session, gd.mapid, gd.posX, gd.posY, gd.posZ, tier, false);
-                break;
-            }
+            GatherZone gz;
+            gz.zoneId = zone.zoneId;
+            gz.mapId = zone.mapId;
+            gz.tier = zone.tier;
+            gz.x = zone.x;
+            gz.y = zone.y;
+            gz.z = zone.z;
+            gz.isSkinning = false;
+            session.zones.push_back(gz);
         }
-    }
-}
 
-void GatherResourcesController::AddZone(GatherResourcesSession& session, uint32 mapId, float x, float y, float z,
-                                        uint32 tier, bool isSkin)
-{
-    WorldPosition point(mapId, x, y, z);
-    uint32 zoneId = point.getAreaId();
-    if (!zoneId)
         return;
-
-    for (GatherZone const& existing : session.zones)
-        if (existing.zoneId == zoneId)
-            return;
-
-    GatherZone zone;
-    zone.zoneId = zoneId;
-    zone.mapId = mapId;
-    zone.tier = tier;
-    zone.x = x;
-    zone.y = y;
-    zone.z = z;
-    zone.isSkinning = isSkin;
-    session.zones.push_back(zone);
+    }
 }
 
 bool GatherResourcesController::PickDestination(GatherResourcesSession& session)

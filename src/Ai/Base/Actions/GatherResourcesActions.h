@@ -46,8 +46,6 @@ private:
     void FinishSessionForRetry(GatherResourcesSession& session);
 
     void FillCandidateZones(GatherResourcesSession& session);
-    void AddZone(GatherResourcesSession& session, uint32 mapId, float x, float y, float z, uint32 tier,
-                 bool isSkin);
     bool PickDestination(GatherResourcesSession& session);
     uint32 BotsFarmingZone(GatherResourcesSession& session, GatherZone const& zone);
     void ReserveZone(GatherResourcesSession& session);

@@ -10,6 +10,8 @@
 #include <cstdint>
 #include <vector>
 
+#include "Define.h"
+
 // A zone that contains skinnable monsters yielding the chosen skin tier, with a
 // representative spawn used as the travel point.
 struct PlayerbotSkinZone

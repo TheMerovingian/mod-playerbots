@@ -19,6 +19,7 @@
 #include "PlayerbotCommandScript.h"
 #include "PlayerbotGatherRepository.h"
 #include "PlayerbotGuildMgr.h"
+#include "PlayerbotNodeRepository.h"
 #include "PlayerbotSkinRepository.h"
 #include "PlayerbotSpellRepository.h"
 #include "PlayerbotWorldThreadProcessor.h"
@@ -380,6 +381,13 @@ public:
         uint32 skinBuildMSTime = getMSTime();
         PlayerbotSkinRepository::Instance().Repopulate();
         LOG_INFO("server.loading", ">> Built playerbots skin index in {} ms", GetMSTimeDiffToNow(skinBuildMSTime));
+
+        // Same for gathering nodes (mining / herbalism): pre-index spawns once at
+        // boot so the 'gather resources' behaviour reads zones/tiers from the DB
+        // instead of scanning the gameobject spawn tables per session.
+        uint32 nodeBuildMSTime = getMSTime();
+        PlayerbotNodeRepository::Instance().Repopulate();
+        LOG_INFO("server.loading", ">> Built playerbots node index in {} ms", GetMSTimeDiffToNow(nodeBuildMSTime));
 
         LOG_INFO("server.loading", "Playerbots World Thread Processor initialized");
     }
