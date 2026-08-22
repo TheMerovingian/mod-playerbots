@@ -669,6 +669,24 @@ AiPlayerbot.BotTaxiGapMs = 200
 # Extra small randomness added to each gap so launches don’t look robotic (ms)
 AiPlayerbot.BotTaxiGapJitterMs = 100
 
+# Allow bots to travel long distances by walking to the nearest flight master and
+# taking an optimal taxi route (instead of walking the whole way). The route is
+# chosen to minimize estimated time (walk to the boarding master + flight time +
+# walk from the arrival master), must be reachable through the taxi graph and
+# affordable from the bot's travel money budget.
+AiPlayerbot.TaxiFlightEnabled = 1
+
+# Straight-line distance (yards) beyond which bots consider taxiing instead of
+# walking. Set to 0 to disable the taxi travel decision entirely.
+AiPlayerbot.TaxiFlightMinDistance = 650.0
+
+# Max time (ms) a bot keeps walking towards the boarding flight master before
+# taxiing is abandoned and the bot falls back to ground movement. Prevents an
+# infinite loop when the flight master is unreachable (blocked nav / bad
+# position). Must comfortably cover the longest distance to the *nearest*
+# flight master (default 120s ~= 800+ yards at run speed).
+AiPlayerbot.TaxiFlightWalkBudget = 120000
+
 #
 #
 ####################################################################################################
@@ -715,6 +733,17 @@ AiPlayerbot.GatherLevelingDurationMinutes = 30
 # Radius (yards) within which a bot searches for a relevant profession trainer.
 # Default: 100
 AiPlayerbot.GatherLevelingSearchRadius = 100.0
+
+# Seconds to back off between rank-up trainer attempts when an attempt fails
+# (no trainer in range / unreachable). Keeps a capped bot gathering while it
+# periodically pokes at the trainer instead of flipping state every tick.
+# Default: 60
+AiPlayerbot.GatherLevelingTrainerRetrySeconds = 60
+
+# Max seconds a bot commits to travelling towards a trainer (walk + taxi)
+# before giving up and returning to full-time gathering.
+# Default: 300 (5 minutes)
+AiPlayerbot.GatherLevelingTravelBudgetSeconds = 300
 
 # Which downtime gathering behaviour a bot may run, so the two never run at the
 # same time (a bot only ever schedules one gather activity):

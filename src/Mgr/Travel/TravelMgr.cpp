@@ -4386,6 +4386,33 @@ TravelMgr::FlightMasterInfo const* TravelMgr::GetNearestFlightMasterInfo(Player*
     return nearest;
 }
 
+std::vector<TravelMgr::FlightMasterInfo const*> TravelMgr::GetNearestFlightMasterInfos(WorldPosition const& pos,
+                                                                                        TeamId team, uint32 count) const
+{
+    auto const& flightMasterCache =
+        (team == TEAM_ALLIANCE) ? allianceFlightMasterCache : hordeFlightMasterCache;
+
+    std::vector<std::pair<float, FlightMasterInfo const*>> sorted;
+    for (auto const& [dbGuid, info] : flightMasterCache)
+    {
+        if (info.pos.GetMapId() != pos.GetMapId() || info.taxiNodeId == 0)
+            continue;
+
+        sorted.emplace_back(pos.GetExactDist2dSq(info.pos.GetPositionX(), info.pos.GetPositionY()), &info);
+    }
+
+    // Stable ascending sort by distance so ties pick the first cache entry.
+    std::sort(sorted.begin(), sorted.end(),
+              [](std::pair<float, FlightMasterInfo const*> const& a, std::pair<float, FlightMasterInfo const*> const& b)
+              { return a.first < b.first; });
+
+    std::vector<FlightMasterInfo const*> result;
+    for (uint32 i = 0; i < count && i < sorted.size(); ++i)
+        result.push_back(sorted[i].second);
+
+    return result;
+}
+
 std::vector<uint32> TravelMgr::GetFlightNodesInZone(uint32 zoneId, TeamId team, uint32 excludeNode) const
 {
     auto const& cache = (team == TEAM_ALLIANCE) ? allianceFlightMasterCache : hordeFlightMasterCache;

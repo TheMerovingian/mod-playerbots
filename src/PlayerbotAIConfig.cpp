@@ -181,6 +181,10 @@ bool PlayerbotAIConfig::Initialize()
     gatherLevelingEnabled = sConfigMgr->GetOption<bool>("AiPlayerbot.GatherLevelingEnabled", true);
     gatherLevelingDurationMinutes = sConfigMgr->GetOption<int32>("AiPlayerbot.GatherLevelingDurationMinutes", 30);
     gatherLevelingSearchRadius = sConfigMgr->GetOption<float>("AiPlayerbot.GatherLevelingSearchRadius", 100.0f);
+    gatherLevelingTrainerRetrySeconds =
+        sConfigMgr->GetOption<int32>("AiPlayerbot.GatherLevelingTrainerRetrySeconds", 60);
+    gatherLevelingTravelBudgetSeconds =
+        sConfigMgr->GetOption<int32>("AiPlayerbot.GatherLevelingTravelBudgetSeconds", 300);
     gatherActivityMode = sConfigMgr->GetOption<int32>("AiPlayerbot.GatherActivityMode", 2);
 
     gatherResourcesEnabled = sConfigMgr->GetOption<bool>("AiPlayerbot.GatherResourcesEnabled", true);
@@ -517,6 +521,11 @@ bool PlayerbotAIConfig::Initialize()
     botTaxiDelayMax = sConfigMgr->GetOption<uint32>("AiPlayerbot.BotTaxiDelayMaxMs", 5000);
     botTaxiGapMs = sConfigMgr->GetOption<uint32>("AiPlayerbot.BotTaxiGapMs", 200);
     botTaxiGapJitterMs = sConfigMgr->GetOption<uint32>("AiPlayerbot.BotTaxiGapJitterMs", 100);
+
+    // Autonomous taxi/flight path travel for long distances.
+    taxiFlightEnabled = sConfigMgr->GetOption<bool>("AiPlayerbot.TaxiFlightEnabled", true);
+    taxiFlightMinDistance = sConfigMgr->GetOption<float>("AiPlayerbot.TaxiFlightMinDistance", 650.0f);
+    taxiFlightWalkBudget = sConfigMgr->GetOption<uint32>("AiPlayerbot.TaxiFlightWalkBudget", 120000);
 
     LOG_INFO("server.loading", "Loading TalentSpecs...");
 

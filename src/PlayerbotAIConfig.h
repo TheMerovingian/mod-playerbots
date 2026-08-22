@@ -326,6 +326,15 @@ public:
     uint32 gatherLevelingDurationMinutes;
     float gatherLevelingSearchRadius;
 
+    // Seconds to back off between rank-up trainer attempts when the attempt
+    // fails (no trainer in range / unreachable). Prevents the state machine
+    // from flipping every tick while a capped bot keeps on gathering.
+    uint32 gatherLevelingTrainerRetrySeconds;
+
+    // Max seconds a bot commits to travelling towards a trainer before giving
+    // up and returning to gathering.
+    uint32 gatherLevelingTravelBudgetSeconds;
+
     // Which downtime gathering behaviour a bot may run, so the two never run at
     // once: 0 = profession levelling, 1 = zone-routed resource gathering,
     // 2 = either (picked per bot at creation).
@@ -496,6 +505,15 @@ public:
     uint32 botTaxiDelayMax;
     uint32 botTaxiGapMs;
     uint32 botTaxiGapJitterMs;
+
+    // Autonomous taxi/flight path travel for long distances.
+    bool taxiFlightEnabled;
+    float taxiFlightMinDistance;
+
+    // Max ms a bot walks towards the boarding flight master before taxiing is
+    // abandoned (returns fallback ground movement). Guards against a stuck
+    // loop when the flight master is unreachable (blocked nav / bad position).
+    uint32 taxiFlightWalkBudget;
 
     std::string const GetTimestampStr();
     bool hasLog(std::string const fileName)

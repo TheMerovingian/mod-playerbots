@@ -26,7 +26,6 @@ public:
     bool IsActive() override;
 
 private:
-    bool HasUnmaxedGatheringProfession();
     bool SeesBoostNode();
 };
 

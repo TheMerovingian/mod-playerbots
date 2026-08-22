@@ -35,6 +35,9 @@ private:
     bool HandleTrainer(GatheringSession& session);
     bool FindNearestTrainer(uint32 skillId, ObjectGuid& guid);
     bool UseTrainer(GatheringSession& session, ObjectGuid guid);
+    bool PrepareTrainerTravel(GatheringSession& session);
+    bool TravelToTrainer(GatheringSession& session);
+    void GiveUpOnTrainer(GatheringSession& session);
     void RoamInZone(GatheringSession& session);
     void Finish(GatheringSession& session);
 };

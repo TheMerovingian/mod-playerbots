@@ -8,6 +8,7 @@
 #include "ChooseRpgTargetAction.h"
 #include "LootObjectStack.h"
 #include "Playerbots.h"
+#include "TravelFlightAction.h"
 
 bool MoveToTravelTargetAction::Execute(Event /*event*/)
 {
@@ -101,6 +102,11 @@ bool MoveToTravelTargetAction::Execute(Event /*event*/)
 
     x += cos(angle) * maxDistance * mod;
     y += sin(angle) * maxDistance * mod;
+
+    // When the destination is far away, prefer flying along an optimal taxi
+    // route (walk to the boarding flight master -> taxi -> walk the remainder).
+    if (TaxiFlightAction(botAI).StartFlightTo(*target->getPosition()))
+        return true;
 
     bool canMove = false;
 
