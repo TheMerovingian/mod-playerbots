@@ -39,6 +39,14 @@ public:
     virtual bool AllowExecution(Action* action, Event event) = 0;
     virtual void After(Action* action, bool executed, Event event) = 0;
     virtual bool OverrideResult(Action* action, bool executed, Event event) = 0;
+
+    // Reports the terminal ActionResult of every evaluated action, including
+    // outcomes that never reach After() (UNKNOWN / USELESS / IMPOSSIBLE).
+    // Default no-op so existing listeners keep compiling.
+    virtual void OnActionResult(PlayerbotAI* botAI, char const* actionName, ActionResult result, float relevance,
+                                Event event)
+    {
+    }
 };
 
 class ActionExecutionListeners : public ActionExecutionListener
@@ -50,6 +58,8 @@ public:
     bool AllowExecution(Action* action, Event event) override;
     void After(Action* action, bool executed, Event event) override;
     bool OverrideResult(Action* action, bool executed, Event event) override;
+    void OnActionResult(PlayerbotAI* botAI, char const* actionName, ActionResult result, float relevance,
+                        Event event) override;
 
     void Add(ActionExecutionListener* listener) { listeners.push_back(listener); }
 
@@ -89,6 +99,10 @@ public:
     bool HasTargetExclusions() const { return hasTargetExclusions; }
     virtual ~Engine(void);
 
+    // Last terminal ActionResult produced by this engine (most recent
+    // ExecuteAction() / tick outcome). Consumers map it to a name.
+    ActionResult GetLastActionResult() const { return m_lastActionResult; }
+
     bool testMode;
 
 private:
@@ -115,6 +129,7 @@ protected:
     std::map<std::string, Strategy*> strategies;
     float lastRelevance;
     std::string lastAction;
+    ActionResult m_lastActionResult = ACTION_RESULT_UNKNOWN;
     uint32 strategyTypeMask;
     bool hasTargetExclusions = false;
     NamedObjectFactoryList<ActionNode> actionNodeFactories;

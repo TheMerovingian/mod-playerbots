@@ -38,6 +38,15 @@ void ActionExecutionListeners::After(Action* action, bool executed, Event event)
     }
 }
 
+void ActionExecutionListeners::OnActionResult(PlayerbotAI* botAI, char const* actionName, ActionResult result,
+                                               float relevance, Event event)
+{
+    for (std::list<ActionExecutionListener*>::iterator i = listeners.begin(); i != listeners.end(); i++)
+    {
+        (*i)->OnActionResult(botAI, actionName, result, relevance, event);
+    }
+}
+
 bool ActionExecutionListeners::OverrideResult(Action* action, bool executed, Event event)
 {
     bool result = executed;
@@ -177,6 +186,8 @@ bool Engine::DoNextAction(Unit* /*unit*/, uint32 /*depth*/, bool minimal)
         if (!action)
         {
             LogAction("A:%s - UNKNOWN", actionNode->getName().c_str());
+            actionExecutionListeners.OnActionResult(botAI, actionNode->getName().c_str(), ACTION_RESULT_UNKNOWN, relevance, event);
+            m_lastActionResult = ACTION_RESULT_UNKNOWN;
         }
         else if (action->isUseful())
         {
@@ -214,6 +225,8 @@ bool Engine::DoNextAction(Unit* /*unit*/, uint32 /*depth*/, bool minimal)
                 if (actionExecuted)
                 {
                     LogAction("A:%s - OK", action->getName().c_str());
+                    actionExecutionListeners.OnActionResult(botAI, action->getName().c_str(), ACTION_RESULT_OK, relevance, event);
+                    m_lastActionResult = ACTION_RESULT_OK;
                     MultiplyAndPush(actionNode->getContinuers(), relevance, false, event, "cont");
                     lastRelevance = relevance;
                     delete actionNode;  // Safe memory management
@@ -222,18 +235,24 @@ bool Engine::DoNextAction(Unit* /*unit*/, uint32 /*depth*/, bool minimal)
                 else
                 {
                     LogAction("A:%s - FAILED", action->getName().c_str());
+                    actionExecutionListeners.OnActionResult(botAI, action->getName().c_str(), ACTION_RESULT_FAILED, relevance, event);
+                    m_lastActionResult = ACTION_RESULT_FAILED;
                     MultiplyAndPush(actionNode->getAlternatives(), relevance + 0.003f, false, event, "alt");
                 }
             }
             else
             {
                 LogAction("A:%s - IMPOSSIBLE", action->getName().c_str());
+                actionExecutionListeners.OnActionResult(botAI, action->getName().c_str(), ACTION_RESULT_IMPOSSIBLE, relevance, event);
+                m_lastActionResult = ACTION_RESULT_IMPOSSIBLE;
                 MultiplyAndPush(actionNode->getAlternatives(), relevance + 0.003f, false, event, "alt");
             }
         }
         else
         {
             LogAction("A:%s - USELESS", action->getName().c_str());
+            actionExecutionListeners.OnActionResult(botAI, action->getName().c_str(), ACTION_RESULT_USELESS, relevance, event);
+            m_lastActionResult = ACTION_RESULT_USELESS;
             lastRelevance = relevance;
         }
 
@@ -310,11 +329,17 @@ ActionResult Engine::ExecuteAction(std::string const name, Event event, std::str
 
     ActionNode* actionNode = CreateActionNode(name);
     if (!actionNode)
+    {
+        actionExecutionListeners.OnActionResult(botAI, name.c_str(), ACTION_RESULT_UNKNOWN, 0.0f, event);
+        m_lastActionResult = ACTION_RESULT_UNKNOWN;
         return ACTION_RESULT_UNKNOWN;
+    }
 
     Action* action = InitializeAction(actionNode);
     if (!action)
     {
+        actionExecutionListeners.OnActionResult(botAI, name.c_str(), ACTION_RESULT_UNKNOWN, 0.0f, event);
+        m_lastActionResult = ACTION_RESULT_UNKNOWN;
         delete actionNode;
         return ACTION_RESULT_UNKNOWN;
     }
@@ -328,12 +353,16 @@ ActionResult Engine::ExecuteAction(std::string const name, Event event, std::str
     if (!action->isUseful())
     {
         delete actionNode;
+        actionExecutionListeners.OnActionResult(botAI, action->getName().c_str(), ACTION_RESULT_USELESS, 0.0f, event);
+        m_lastActionResult = ACTION_RESULT_USELESS;
         return ACTION_RESULT_USELESS;
     }
 
     if (!action->isPossible())
     {
         delete actionNode;
+        actionExecutionListeners.OnActionResult(botAI, action->getName().c_str(), ACTION_RESULT_IMPOSSIBLE, 0.0f, event);
+        m_lastActionResult = ACTION_RESULT_IMPOSSIBLE;
         return ACTION_RESULT_IMPOSSIBLE;
     }
 
@@ -344,7 +373,10 @@ ActionResult Engine::ExecuteAction(std::string const name, Event event, std::str
 
     delete actionNode;
 
-    return result ? ACTION_RESULT_OK : ACTION_RESULT_FAILED;
+    ActionResult outcome = result ? ACTION_RESULT_OK : ACTION_RESULT_FAILED;
+    m_lastActionResult = outcome;
+    actionExecutionListeners.OnActionResult(botAI, action->getName().c_str(), outcome, 0.0f, event);
+    return outcome;
 }
 
 void Engine::addStrategy(std::string const name, bool init)
