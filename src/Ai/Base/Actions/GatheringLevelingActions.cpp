@@ -275,6 +275,11 @@ bool GatheringLevelingUpdateAction::FindNearestTrainer(uint32 skillId, ObjectGui
 bool GatheringLevelingUpdateAction::UseTrainer(GatheringSession& session, ObjectGuid guid)
 {
     Creature* npc = ObjectAccessor::GetCreature(*bot, guid);
+    // Fall back to any loaded trainer of `session.trainerEntry` near the bot:
+    // the cached travel coordinate / spawnId may point at another spawn.
+    if (!npc && session.trainerEntry)
+        npc = bot->FindNearestCreature(session.trainerEntry, INTERACTION_DISTANCE * 2);
+
     if (!npc || !npc->IsAlive())
         return false;
 
@@ -340,15 +345,22 @@ bool GatheringLevelingUpdateAction::TravelToTrainer(GatheringSession& session)
     if (budgetMs && session.trainerTravelStart && now - session.trainerTravelStart >= budgetMs)
         return false;
 
-    // Let the current movement (walk / walk-to-flight-master / flight) finish
-    // before re-planning; never treat an in-progress move as failure.
-    if (bot->isMoving() || bot->HasUnitState(UNIT_STATE_IN_FLIGHT) || bot->IsFlying())
-        return true;
+    // Already near the trainer (any spawn of the entry): try to interact. A
+    // coordinate-only match is not used because a trainer entry can have
+    // several spawns - the bot must interact with the actual creature that is
+    // loaded in its grid, not a stale travel coordinate. This also runs even
+    // when a stale movement/flight flag is still set (e.g. right after a taxi
+    // lands), so arrival always attempts the interaction.
+    Creature* trainer = bot->FindNearestCreature(session.trainerEntry, INTERACTION_DISTANCE * 2);
+    if (session.trainerMapId == bot->GetMapId() && trainer && trainer->IsAlive())
+        return UseTrainer(session, trainer->GetGUID());
 
-    // Reached the trainer's location: try to interact with it.
-    if (session.trainerMapId == bot->GetMapId() &&
-        bot->GetExactDist(session.trainerX, session.trainerY, session.trainerZ) <= INTERACTION_DISTANCE)
-        return UseTrainer(session, ObjectGuid::Create<HighGuid::Unit>(session.trainerEntry, session.trainerSpawnId));
+    // Let a genuine flight/flying state finish before interacting. A generic
+    // isMoving() flag is NOT treated as blocking here: it often lingers past
+    // the actual arrival, and the movement calls below re-issue the same
+    // target, so re-planning every tick is harmless and cannot wedge the bot.
+    if (bot->HasUnitState(UNIT_STATE_IN_FLIGHT) || bot->IsFlying())
+        return true;
 
     WorldPosition const dest(session.trainerMapId, session.trainerX, session.trainerY, session.trainerZ);
 

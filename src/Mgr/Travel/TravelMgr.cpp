@@ -4398,7 +4398,7 @@ std::vector<TravelMgr::FlightMasterInfo const*> TravelMgr::GetNearestFlightMaste
         if (info.pos.GetMapId() != pos.GetMapId() || info.taxiNodeId == 0)
             continue;
 
-        sorted.emplace_back(pos.sqDistance2d(info.pos), &info);
+        sorted.emplace_back(pos.GetExactDist2dSq(info.pos.GetPositionX(), info.pos.GetPositionY()), &info);
     }
 
     // Stable ascending sort by distance so ties pick the first cache entry.

@@ -525,6 +525,7 @@ bool PlayerbotAIConfig::Initialize()
     // Autonomous taxi/flight path travel for long distances.
     taxiFlightEnabled = sConfigMgr->GetOption<bool>("AiPlayerbot.TaxiFlightEnabled", true);
     taxiFlightMinDistance = sConfigMgr->GetOption<float>("AiPlayerbot.TaxiFlightMinDistance", 650.0f);
+    taxiFlightWalkBudget = sConfigMgr->GetOption<uint32>("AiPlayerbot.TaxiFlightWalkBudget", 120000);
 
     LOG_INFO("server.loading", "Loading TalentSpecs...");
 

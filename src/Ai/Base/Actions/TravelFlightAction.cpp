@@ -14,6 +14,7 @@
 #include "PlayerbotAI.h"
 #include "PlayerbotAIConfig.h"
 #include "Playerbots.h"
+#include "TaxiFlightStateValue.h"
 #include "Timer.h"
 #include "TravelNode.h"
 #include "WorldSession.h"
@@ -44,14 +45,43 @@ bool TaxiFlightAction::StartFlightTo(WorldPosition const& destPos)
         return false;
 
     TaxiFlightState& state = AI_VALUE(TaxiFlightState&, "taxi flight state");
-    if (getMSTime() < state.nextAttemptAt)
+    uint32 const now = getMSTime();
+    if (now < state.nextAttemptAt)
         return false;
+
+    // Stuck walk guard: if we have been walking to the boarding flight master
+    // for longer than the budget (blocked nav / bad position), abandon taxiing
+    // for this bot for a long cool-down and let the caller fall back to ground
+    // movement instead of re-trying the same unreachable route forever.
+    uint32 walkBudget = sPlayerbotAIConfig.taxiFlightWalkBudget;
+    if (state.walkStart && walkBudget && now - state.walkStart > walkBudget)
+    {
+        LOG_WARN("playerbots", "TaxiFlight {} gave up reaching the boarding flight master (walk budget {})",
+                 bot->GetGUID().ToString(), walkBudget);
+        state.nextAttemptAt = now + 5 * MINUTE * IN_MILLISECONDS;
+        state.walkStart = 0;
+        return false;
+    }
+
+    // While en route to the boarding flight master, only re-resolve the route
+    // every few seconds instead of every engine tick - the bot does not need
+    // to reroute constantly while it is walking.
+    if (now < state.nextRouteEvalAt)
+        return true;
+    state.nextRouteEvalAt = now + 5000;
 
     TaxiRoute route = FindBestRoute(destPos);
     if (!route.valid)
+    {
+        state.walkStart = 0;
         return false;
+    }
 
-    // Walk to the boarding flight master first; keep returning true while en route.
+    // Record when the walk to the boarding flight master begins (bounded by
+    // the walk budget above).
+    state.walkStart = state.walkStart ? state.walkStart : now;
+
+    // Walk to the boarding flight master; keep returning true while en route.
     float distToFlightMaster = bot->GetDistance(route.originFlightMasterPos);
     if (distToFlightMaster > INTERACTION_DISTANCE)
     {
@@ -62,6 +92,9 @@ bool TaxiFlightAction::StartFlightTo(WorldPosition const& destPos)
         botAI->SetNextCheckDelay(1000);
         return true;
     }
+
+    // Reached the flight master; any pending walk state is resolved.
+    state.walkStart = 0;
 
     Creature* flightMaster = bot->FindNearestCreature(route.originFlightMasterEntry, INTERACTION_DISTANCE * 3);
     if (!flightMaster || !flightMaster->IsAlive())

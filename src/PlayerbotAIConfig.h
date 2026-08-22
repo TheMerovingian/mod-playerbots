@@ -510,6 +510,11 @@ public:
     bool taxiFlightEnabled;
     float taxiFlightMinDistance;
 
+    // Max ms a bot walks towards the boarding flight master before taxiing is
+    // abandoned (returns fallback ground movement). Guards against a stuck
+    // loop when the flight master is unreachable (blocked nav / bad position).
+    uint32 taxiFlightWalkBudget;
+
     std::string const GetTimestampStr();
     bool hasLog(std::string const fileName)
     {

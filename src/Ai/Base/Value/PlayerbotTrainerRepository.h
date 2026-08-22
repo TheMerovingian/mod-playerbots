@@ -47,10 +47,8 @@ private:
     bool GetNearest(std::vector<TrainerEntry> const& candidates, WorldPosition from, TrainerEntry& out) const;
 
     mutable bool built = false;
-
-    // Buckets ordered MINING, HERBALISM, SKINNING.
-    std::vector<TrainerEntry> trainers[3];
-    std::vector<TrainerEntry> anyGathering;
+    mutable std::vector<TrainerEntry> trainers[3];   // buckets MINING, HERBALISM, SKINNING
+    mutable std::vector<TrainerEntry> anyGathering;  // any gathering trainer
 };
 
 #endif  // PLAYERBOTS_PLAYERBOTTRAINERREPOSITORY_H

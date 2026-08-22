@@ -14,13 +14,13 @@ class PlayerbotAI;
 // Persisted per-bot state for autonomous taxi travel. Kept deliberately small:
 // the optimal route itself is recomputed cheaply on demand (taxi-graph cache
 // lookups), so bots re-evaluate after combat, a teleport or a missed takeoff.
-// The cooldown only prevents hammering a failed boarding (e.g. no money) every
-// single tick. Looping after a flight is naturally impossible because the
-// nearest flight master to the landing point is the arrival master itself, so
-// the from/to search returns no route and the bot simply walks the remainder.
+// The cooldowns only prevent hammering a failed boarding (e.g. no money) or an
+// unreachable boarding flight master every single tick.
 struct TaxiFlightState
 {
     uint32 nextAttemptAt = 0;  // getMSTime() before which we don't try to board again
+    uint32 walkStart = 0;      // getMSTime() when we began walking to the boarding flight master
+    uint32 nextRouteEvalAt = 0;  // getMSTime() before which we won't re-resolve the taxi route
 };
 
 class TaxiFlightStateValue : public ManualSetValue<TaxiFlightState&>
@@ -32,4 +32,4 @@ private:
     TaxiFlightState data = TaxiFlightState();
 };
 
-#endif
+#endif  // PLAYERBOTS_TAXIFLIGHTSTATEVALUE_H
