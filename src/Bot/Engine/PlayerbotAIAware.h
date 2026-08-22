@@ -14,6 +14,8 @@ class PlayerbotAIAware
 public:
     PlayerbotAIAware(PlayerbotAI* botAI) : botAI(botAI) {}
 
+    PlayerbotAI* GetBotAI() { return botAI; }
+
 protected:
     PlayerbotAI* botAI;
 };

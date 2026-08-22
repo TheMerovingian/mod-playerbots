@@ -570,6 +570,7 @@ public:
 
     void SetMaster(Player* newMaster) { master = newMaster; }
     AiObjectContext* GetAiObjectContext() { return aiObjectContext; }
+    Engine* GetEngine(BotState type) { return type < BOT_STATE_MAX ? engines[type] : nullptr; }
     ChatHelper* GetChatHelper() { return &chatHelper; }
     bool IsOpposing(Player* player);
     static bool IsOpposing(uint8 race1, uint8 race2);

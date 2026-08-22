@@ -194,13 +194,11 @@ void GatherResourcesController::HandleSelecting(GatherResourcesSession& session)
 
     if (tiers.empty())
     {
-        LOG_INFO("playerbots", "[gatherresD] no tiers skill={}", session.skillId);
         // No zone holds a node tier this bot can gather: leave the behaviour and
         // return the bot to its next priority.
         FinishSessionForRetry(session);
         return;
     }
-    LOG_INFO("playerbots", "[gatherresD] tiers={} skill={}", tiers.size(), session.skillId);
 
     // Choose tier: highest-available vs random, split by the configured percent.
     bool wantHighest = urand(0, 99) < sPlayerbotAIConfig.gatherResourceHighestPriorityPercent;
@@ -224,8 +222,6 @@ void GatherResourcesController::HandleSelecting(GatherResourcesSession& session)
     }
 
     session.state = GR_STATE_TRAVELLING;
-    LOG_INFO("playerbots", "[gatherresD] selected zone={} tier={} zones={}", session.zoneId, session.tier,
-             session.zones.size());
     botAI->TellMaster("Going to gather tier " + std::to_string(session.tier) + " resources.");
 }
 
