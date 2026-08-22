@@ -585,6 +585,37 @@ void AiFactory::AddDefaultNonCombatStrategies(Player* player, PlayerbotAI* const
                                             "gather", "duel", "pvp", "buff", "mount", "emote", nullptr);
     }
 
+    // Level the bot's collecting profession (mining / herbalism / skinning).
+    // "gather activity mode" makes the two downtime gather behaviours mutually
+    // exclusive (only one registered per bot) so they never run at once:
+    //   0 = profession levelling only, 1 = zone-routed resource gathering only,
+    //   2 = either, picked per-bot. If the picked activity's own enable flag is
+    //   off, fall back to the other option so a single gather activity remains.
+    bool hasGatheringSkill = player->HasSkill(SKILL_MINING) || player->HasSkill(SKILL_HERBALISM) ||
+                             player->HasSkill(SKILL_SKINNING);
+    bool allowLeveling = sPlayerbotAIConfig.gatherLevelingEnabled;
+    bool allowResources = sPlayerbotAIConfig.gatherResourcesEnabled;
+
+    uint32 gatherMode = sPlayerbotAIConfig.gatherActivityMode;
+    if (gatherMode == 2 && hasGatheringSkill && (allowLeveling || allowResources))
+        gatherMode = urand(0, 1);
+
+    if (gatherMode == 0 && !allowLeveling && allowResources)
+        gatherMode = 1;
+    else if (gatherMode == 1 && !allowResources && allowLeveling)
+        gatherMode = 0;
+
+    if (hasGatheringSkill && allowLeveling && gatherMode == 0)
+        nonCombatEngine->addStrategy("gather leveling", false);
+
+    // Downtime resource gathering (zone-routed mining / herbalism / skinning).
+    if (hasGatheringSkill && allowResources && gatherMode == 1)
+        nonCombatEngine->addStrategy("gather resources", false);
+
+    // Post saleable goods (gathering resources, cloth, trade goods) on the AH.
+    if (sPlayerbotAIConfig.auctionEnabled)
+        nonCombatEngine->addStrategy("auction", false);
+
     if (sPlayerbotAIConfig.autoSaveMana && PlayerbotAI::IsHeal(player, true))
         nonCombatEngine->addStrategy("save mana", false);
 

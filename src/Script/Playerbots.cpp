@@ -5,6 +5,8 @@
 
 #include "Playerbots.h"
 #include "BattleGroundTactics.h"
+
+#include "AuctionHouseScript.h"
 #include "BattlefieldScript.h"
 #include "Channel.h"
 #include "Config.h"
@@ -13,8 +15,12 @@
 #include "GuildTaskMgr.h"
 #include "PlayerScript.h"
 #include "PlayerbotAIConfig.h"
+#include "PlayerbotAuctionOperations.h"
 #include "PlayerbotCommandScript.h"
+#include "PlayerbotGatherRepository.h"
 #include "PlayerbotGuildMgr.h"
+#include "PlayerbotNodeRepository.h"
+#include "PlayerbotSkinRepository.h"
 #include "PlayerbotSpellRepository.h"
 #include "PlayerbotWorldThreadProcessor.h"
 #include "RandomPlayerbotMgr.h"
@@ -34,7 +40,15 @@ public:
                                            : 0);
         playerbotLoader.AddDatabase(PlayerbotsDatabase, "Playerbots");
 
-        return playerbotLoader.Load();
+        if (!playerbotLoader.Load())
+            return false;
+
+        // Gather-zone occupancy counters are transient: reset them on every
+        // server start so rows left behind by a previous session (crash,
+        // logout, teleport) do not inflate a zone's active bot count.
+        PlayerbotGatherRepository::Instance().Clear();
+
+        return true;
     }
 
     void OnDatabasesKeepAlive() override { PlayerbotsDatabase.KeepAlive(); }
@@ -360,6 +374,21 @@ public:
 
         PlayerbotSpellRepository::Instance().Initialize();
 
+        // Build the zone / leather / monster skinning index from the creature
+        // spawn data (loaded by now). This is the initial (and every-boot)
+        // population mechanism for the skinning index behind the 'gather
+        // resources' behaviour.
+        uint32 skinBuildMSTime = getMSTime();
+        PlayerbotSkinRepository::Instance().Repopulate();
+        LOG_INFO("server.loading", ">> Built playerbots skin index in {} ms", GetMSTimeDiffToNow(skinBuildMSTime));
+
+        // Same for gathering nodes (mining / herbalism): pre-index spawns once at
+        // boot so the 'gather resources' behaviour reads zones/tiers from the DB
+        // instead of scanning the gameobject spawn tables per session.
+        uint32 nodeBuildMSTime = getMSTime();
+        PlayerbotNodeRepository::Instance().Repopulate();
+        LOG_INFO("server.loading", ">> Built playerbots node index in {} ms", GetMSTimeDiffToNow(nodeBuildMSTime));
+
         LOG_INFO("server.loading", "Playerbots World Thread Processor initialized");
     }
 
@@ -510,6 +539,28 @@ public:
 
 void AddPlayerbotsSecureLoginScripts();
 
+class PlayerbotAuctionHouseScript : public AuctionHouseScript
+{
+public:
+    PlayerbotAuctionHouseScript() : AuctionHouseScript("PlayerbotAuctionHouseScript",
+                                                       {AUCTIONHOUSEHOOK_ON_AUCTION_SUCCESSFUL}) {}
+
+    // Fired on the world thread when an auction sells (even if the owner is
+    // offline). For playerbot-owned listings we record the sale and refresh the
+    // demand-driven pricing. The DB write is deferred to the world-thread
+    // operation queue to serialise with the rest of the bot's world work.
+    void OnAuctionSuccessful(AuctionHouseObject* /*ah*/, AuctionEntry* auction) override
+    {
+        uint32 const ownerLow = auction->owner.GetCounter();
+        if (!sRandomPlayerbotMgr.IsRandomBot(ownerLow))
+            return;
+
+        auto op = std::make_unique<AuctionSaleOperation>(auction->Id, auction->item_template, auction->bid,
+                                                         ownerLow, static_cast<uint32>(auction->expire_time));
+        PlayerbotWorldThreadProcessor::instance().QueueOperation(std::move(op));
+    }
+};
+
 void AddSC_MagtheridonBotScripts();
 void AddSC_TempestKeepBotScripts();
 void AddSC_HyjalSummitBotScripts();
@@ -526,6 +577,7 @@ void AddPlayerbotsScripts()
     new PlayerbotsServerScript();
     new PlayerbotsWorldScript();
     new PlayerbotsScript();
+    new PlayerbotAuctionHouseScript();
     new PlayerBotsBGScript();
     AddPlayerbotsSecureLoginScripts();
     AddPlayerbotsCommandscripts();

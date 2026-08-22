@@ -178,6 +178,30 @@ bool PlayerbotAIConfig::Initialize()
     randomBotRpgChance = sConfigMgr->GetOption<float>("AiPlayerbot.RandomBotRpgChance", 0.20f);
 
     iterationsPerTick = sConfigMgr->GetOption<int32>("AiPlayerbot.IterationsPerTick", 10);
+    gatherLevelingEnabled = sConfigMgr->GetOption<bool>("AiPlayerbot.GatherLevelingEnabled", true);
+    gatherLevelingDurationMinutes = sConfigMgr->GetOption<int32>("AiPlayerbot.GatherLevelingDurationMinutes", 30);
+    gatherLevelingSearchRadius = sConfigMgr->GetOption<float>("AiPlayerbot.GatherLevelingSearchRadius", 100.0f);
+    gatherActivityMode = sConfigMgr->GetOption<int32>("AiPlayerbot.GatherActivityMode", 2);
+
+    gatherResourcesEnabled = sConfigMgr->GetOption<bool>("AiPlayerbot.GatherResourcesEnabled", true);
+    gatherResourceHighestPriorityPercent =
+        sConfigMgr->GetOption<int32>("AiPlayerbot.GatherResourceHighestPriorityPercent", 50);
+    gatherResourceDurationMinutes =
+        sConfigMgr->GetOption<int32>("AiPlayerbot.GatherResourceDurationMinutes", 30);
+    gatherResourceMaxBotsPerZone =
+        sConfigMgr->GetOption<int32>("AiPlayerbot.GatherResourceMaxBotsPerZone", 3);
+    gatherResourceBagSoftCapPercent =
+        sConfigMgr->GetOption<int32>("AiPlayerbot.GatherResourceBagSoftCapPercent", 20);
+    gatherResourceCooldownMinutes =
+        sConfigMgr->GetOption<int32>("AiPlayerbot.GatherResourceCooldownMinutes", 15);
+
+    auctionEnabled = sConfigMgr->GetOption<bool>("AiPlayerbot.AuctionEnabled", true);
+    auctionWindowSeconds = sConfigMgr->GetOption<uint32>("AiPlayerbot.AuctionWindowSeconds", 30);
+    auctionStartMultiplier = sConfigMgr->GetOption<uint32>("AiPlayerbot.AuctionStartMultiplier", 5);
+    auctionBuyoutMultiplier = sConfigMgr->GetOption<uint32>("AiPlayerbot.AuctionBuyoutMultiplier", 2);
+    auctionIncreasePercent = sConfigMgr->GetOption<uint32>("AiPlayerbot.AuctionIncreasePercent", 10);
+    auctionDecreasePercent = sConfigMgr->GetOption<uint32>("AiPlayerbot.AuctionDecreasePercent", 10);
+    auctionKeepStacks = sConfigMgr->GetOption<uint32>("AiPlayerbot.AuctionKeepStacks", 3);
 
     allowAccountBots = sConfigMgr->GetOption<bool>("AiPlayerbot.AllowAccountBots", true);
     allowGuildBots = sConfigMgr->GetOption<bool>("AiPlayerbot.AllowGuildBots", true);

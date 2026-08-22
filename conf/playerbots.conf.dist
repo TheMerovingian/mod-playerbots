@@ -86,8 +86,9 @@ AiPlayerbot.Enabled = 1
 AiPlayerbot.RandomBotAutologin = 1
 
 # Randombot count
-AiPlayerbot.MinRandomBots = 500
-AiPlayerbot.MaxRandomBots = 500
+# Intentionally reduced to 50 for lightweight test/dev environments.
+AiPlayerbot.MinRandomBots = 50
+AiPlayerbot.MaxRandomBots = 50
 
 # Randombot accounts
 # Set to 0 to automatically calculate needed accounts based on MaxRandomBots, EnablePeriodicOnlineOffline
@@ -99,7 +100,8 @@ AiPlayerbot.RandomBotAccountCount = 0
 # Addclass accounts
 # Number of accounts created for bots reserved for the addclass command. As with randombots, each account has
 # 10 bots (or 9 if WotLK is disabled), one bot for each class.
-AiPlayerbot.AddClassAccountPoolSize = 50
+# Set to 0 to disable creating the addclass pool (keeps test environments light).
+AiPlayerbot.AddClassAccountPoolSize = 0
 
 # Prefix for created bot accounts (of any type).
 # Do not change this prefix while there are existing bot accounts.
@@ -694,6 +696,101 @@ AiPlayerbot.FishingDistance = 40.0
 
 # Distance from water (in yards) beyond which a bot will remove the 'master fishing' strategy
 AiPlayerbot.EndFishingWithMaster = 30.0
+
+####################################################################################################
+# GATHER LEVELING
+#
+
+# Enable the 'gather leveling' behaviour: bots proactively level their collecting
+# profession (mining / herbalism / skinning) by visiting trainers and roaming zones
+# to harvest nodes. Every bot is assigned a random collecting profession on creation.
+# Default: 1 (enabled)
+AiPlayerbot.GatherLevelingEnabled = 1
+
+# Max minutes the behaviour runs before the bot stops levelling its profession,
+# even if it is not maxed yet.
+# Default: 30
+AiPlayerbot.GatherLevelingDurationMinutes = 30
+
+# Radius (yards) within which a bot searches for a relevant profession trainer.
+# Default: 100
+AiPlayerbot.GatherLevelingSearchRadius = 100.0
+
+# Which downtime gathering behaviour a bot may run, so the two never run at the
+# same time (a bot only ever schedules one gather activity):
+#   0 = 'gather leveling' only (visit trainers, level the profession)
+#   1 = 'gather resources' only (zone-routed mining/herbalism/skinning)
+#   2 = either, picked per-bot at creation
+# Default: 2
+AiPlayerbot.GatherActivityMode = 2
+
+# Enable the 'gather resources' downtime behaviour: a bot travels to the closest
+# zone holding a chosen profession resource tier and gathers nodes / monsters
+# there for the configured duration (or until its bag soft-cap), then returns to
+# its next idle priority. Default: 1 (enabled)
+AiPlayerbot.GatherResourcesEnabled = 1
+
+# Percent chance (0-100) that the bot picks the HIGHEST gather tier it can gather
+# instead of a random tier. 50 = both options equally likely.
+# Default: 50
+AiPlayerbot.GatherResourceHighestPriorityPercent = 50
+
+# How long a gather run lasts (minutes). The timer only starts once the bot
+# arrives at the target zone (travel / roam-through time is not counted).
+# Default: 30
+AiPlayerbot.GatherResourceDurationMinutes = 30
+
+# Max other bots already farming the same resource type in a zone before the bot
+# reroutes to the next-closest zone holding that tier.
+# Default: 3
+AiPlayerbot.GatherResourceMaxBotsPerZone = 3
+
+# Bag soft-cap: stop gathering once used inventory slots reach this % of the
+# backpack's total capacity. Default: 20
+AiPlayerbot.GatherResourceBagSoftCapPercent = 20
+
+# Cooldown (minutes) between two gather runs so other downtime activities get a
+# turn between sessions. Default: 15
+AiPlayerbot.GatherResourceCooldownMinutes = 15
+
+# Enable the 'auction' behaviour: bots actively list saleable goods (gathering
+# resources, cloth, trade goods) on the auction house instead of vendoring them.
+# Only randombots participate (their AI runs on the world thread, two side
+# interaction aside from regular player auctions).
+# Default: 1 (enabled)
+AiPlayerbot.AuctionEnabled = 1
+
+# Size (seconds) of the chained time window used to measure auction demand. Every
+# completed sale in a chain of sales where each neighbouring sale is within this
+# window of the previous one adds one silver to the computed listing price.
+# Default: 30
+AiPlayerbot.AuctionWindowSeconds = 30
+
+# When no previous sale for an item is recorded, the listing price is seeded at
+# this multiple of the item's vendor sell value.
+# Default: 5
+AiPlayerbot.AuctionStartMultiplier = 5
+
+# Buyout price is set to this multiple of the computed listing price.
+# Default: 2
+AiPlayerbot.AuctionBuyoutMultiplier = 2
+
+# Percent to increase the base unit price when the last recorded sale of the
+# item took less than a day to sell.
+# Default: 10
+AiPlayerbot.AuctionIncreasePercent = 10
+
+# Percent to decrease the base unit price when the last recorded sale of the
+# item took longer than a day to sell.
+# Default: 10
+AiPlayerbot.AuctionDecreasePercent = 10
+
+# Full stacks of a combat consumable (ammo, poisons, sharpening stones) or a
+# profession trade material (ores, herbs, cloth) a bot always keeps. For trade
+# goods the retained stock is used for the bot's own profession crafting; only
+# the excess is auctioned, so bots keep enough to craft with.
+# Default: 3
+AiPlayerbot.AuctionKeepStacks = 3
 
 #
 #
