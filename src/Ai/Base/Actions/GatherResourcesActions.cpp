@@ -95,8 +95,11 @@ bool GatherResourcesController::Execute(Event /*event*/)
     }
 
     // Following another player/master: keep passive node harvesting but do not
-    // reroute / roam the bot away from the party.
-    if (botAI->HasStrategy("follow", BOT_STATE_NON_COMBAT))
+    // reroute / roam the bot away from the party. The "follow" strategy is part
+    // of every bot's default non-combat strategy set, so only defer when there
+    // is an actual master or a different group leader to stay with.
+    Player* followTarget = botAI->GetGroupLeader();
+    if (botAI->HasStrategy("follow", BOT_STATE_NON_COMBAT) && followTarget && followTarget != bot)
         return true;
 
     switch (session.state)
