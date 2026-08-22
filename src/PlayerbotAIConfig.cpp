@@ -181,6 +181,10 @@ bool PlayerbotAIConfig::Initialize()
     gatherLevelingEnabled = sConfigMgr->GetOption<bool>("AiPlayerbot.GatherLevelingEnabled", true);
     gatherLevelingDurationMinutes = sConfigMgr->GetOption<int32>("AiPlayerbot.GatherLevelingDurationMinutes", 30);
     gatherLevelingSearchRadius = sConfigMgr->GetOption<float>("AiPlayerbot.GatherLevelingSearchRadius", 100.0f);
+    gatherLevelingTrainerRetrySeconds =
+        sConfigMgr->GetOption<int32>("AiPlayerbot.GatherLevelingTrainerRetrySeconds", 60);
+    gatherLevelingTravelBudgetSeconds =
+        sConfigMgr->GetOption<int32>("AiPlayerbot.GatherLevelingTravelBudgetSeconds", 300);
     gatherActivityMode = sConfigMgr->GetOption<int32>("AiPlayerbot.GatherActivityMode", 2);
 
     gatherResourcesEnabled = sConfigMgr->GetOption<bool>("AiPlayerbot.GatherResourcesEnabled", true);

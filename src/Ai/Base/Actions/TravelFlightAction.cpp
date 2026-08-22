@@ -29,14 +29,18 @@ bool TaxiFlightAction::StartFlightTo(WorldPosition const& destPos)
     if (bot->HasUnitState(UNIT_STATE_IN_FLIGHT) || bot->IsFlying())
         return true;
 
-    if (!destPos || destPos.GetMapId() != bot->GetMapId())
+    if (!destPos)
         return false;
 
     if (bot->IsInCombat() || botAI->GetState() == BOT_STATE_COMBAT || botAI->IsInVehicle() ||
         bot->InBattleground() || bot->InArena())
         return false;
 
-    if (bot->GetDistance(destPos) < sPlayerbotAIConfig.taxiFlightMinDistance)
+    // A destination on another map can only be reached by taxi (there is no
+    // ground route between continents). On the same map only bother flying for
+    // long hops - the caller falls back to walking for short ones.
+    bool sameMap = destPos.GetMapId() == bot->GetMapId();
+    if (sameMap && bot->GetDistance(destPos) < sPlayerbotAIConfig.taxiFlightMinDistance)
         return false;
 
     TaxiFlightState& state = AI_VALUE(TaxiFlightState&, "taxi flight state");

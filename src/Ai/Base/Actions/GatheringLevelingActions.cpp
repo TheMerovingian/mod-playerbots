@@ -14,12 +14,15 @@
 #include "ObjectMgr.h"
 #include "PlayerbotAIConfig.h"
 #include "PlayerbotFactory.h"
+#include "PlayerbotTrainerRepository.h"
 #include "Playerbots.h"
 #include "Random.h"
 #include "SharedDefines.h"
 #include "SpellMgr.h"
 #include "Timer.h"
 #include "Trainer.h"
+#include "TravelFlightAction.h"
+#include "TravelMgr.h"
 
 namespace
 {
@@ -81,8 +84,8 @@ bool GatheringLevelingUpdateAction::Execute(Event /*event*/)
     GatheringSession& session = AI_VALUE_REF(GatheringSession, "gathering session");
     uint32 now = getMSTime();
 
-    // Open-world levelling only: inside an instance/battleground just keep passive
-    // gathering active and defer the profession loop.
+    // Open-world levelling only: inside an instance/battleground just keep the
+    // passive gathering strategy active and defer the profession loop.
     if (bot->GetMap()->Instanceable() || bot->InBattleground())
     {
         if (!botAI->HasStrategy("gather", BOT_STATE_NON_COMBAT))
@@ -95,8 +98,17 @@ bool GatheringLevelingUpdateAction::Execute(Event /*event*/)
         session.started = true;
         session.skillId = GetGatheringSkill();
         session.startTime = now;
+        session.trainerTravelStart = 0;
 
         if (session.skillId && IsProfessionMaxed(session.skillId))
+        {
+            Finish(session);
+            return true;
+        }
+
+        // With no gathering profession AND no free primary profession slot the
+        // bot can never obtain one: finish instead of roaming the zone forever.
+        if (!session.skillId && bot->GetFreePrimaryProfessionPoints() == 0)
         {
             Finish(session);
             return true;
@@ -129,11 +141,31 @@ bool GatheringLevelingUpdateAction::Execute(Event /*event*/)
             if (!botAI->HasStrategy("gather", BOT_STATE_NON_COMBAT))
                 botAI->ChangeStrategy("+gather", BOT_STATE_NON_COMBAT);
 
-            if (!HandleTrainer(session))
+            // A trainer within the local search radius: use it directly.
+            if (HandleTrainer(session))
+                break;
+
+            // Otherwise route towards the nearest cached trainer that can teach
+            // the skill (possibly on another map, reached by taxi).
+            if (PrepareTrainerTravel(session))
             {
-                botAI->TellError("No relevant trainer reachable; gathering with my current profession.");
-                session.state = GatheringLevelingState::GATHERING;
+                session.state = GatheringLevelingState::TRAVELLING_TO_TRAINER;
+                break;
             }
+
+            // No trainer known at all: back off and keep gathering.
+            GiveUpOnTrainer(session);
+            break;
+        }
+        case GatheringLevelingState::TRAVELLING_TO_TRAINER:
+        {
+            if (!botAI->HasStrategy("gather", BOT_STATE_NON_COMBAT))
+                botAI->ChangeStrategy("+gather", BOT_STATE_NON_COMBAT);
+
+            if (TravelToTrainer(session))
+                break;
+
+            GiveUpOnTrainer(session);
             break;
         }
         case GatheringLevelingState::GATHERING:
@@ -141,16 +173,23 @@ bool GatheringLevelingUpdateAction::Execute(Event /*event*/)
             if (!botAI->HasStrategy("gather", BOT_STATE_NON_COMBAT))
                 botAI->ChangeStrategy("+gather", BOT_STATE_NON_COMBAT);
 
-            // Hit the current rank cap -> need a rank-up.
-            if (session.skillId && NeedsRankUp(session.skillId))
+            // Hit the current rank cap (or still lack a profession) -> probe a
+            // trainer. Only interrupt the idle bot on a throttled cadence so a
+            // failed attempt backs off and the bot keeps roaming/harvesting what
+            // it can in between.
+            bool needsTraining = !session.skillId || (session.skillId && NeedsRankUp(session.skillId));
+            if (needsTraining && now >= session.nextTrainerAttempt && !bot->IsInCombat() && !bot->isMoving() &&
+                !botAI->HasStrategy("follow", BOT_STATE_NON_COMBAT) &&
+                !AI_VALUE(LootObject, "loot target").IsLootPossible(bot))
             {
                 session.state = GatheringLevelingState::TO_TRAINER;
                 botAI->TellMaster("I need to visit a trainer for the next profession rank.");
                 break;
             }
 
-            // Path through the zone looking for nodes (gather/loot handle harvesting).
-            // Skip roaming while following a master so we don't hijack the party.
+            // Path through the zone looking for nodes (gather/loot handle
+            // harvesting). Skip roaming while following a master so we don't
+            // hijack the party.
             if (!bot->IsInCombat() && !bot->isMoving() &&
                 !botAI->HasStrategy("follow", BOT_STATE_NON_COMBAT) &&
                 !AI_VALUE(LootObject, "loot target").IsLootPossible(bot))
@@ -251,18 +290,98 @@ bool GatheringLevelingUpdateAction::UseTrainer(GatheringSession& session, Object
     bot->SetSelection(guid);
     botAI->DoSpecificAction("trainer");
 
-    uint32 skillId = session.skillId;
-    if (!skillId || bot->GetSkillValue(skillId) > 0)
-    {
-        session.skillId = skillId;
-        if (skillId && !NeedsRankUp(skillId))
-        {
-            session.state = GatheringLevelingState::GATHERING;
-            botAI->TellMaster("Profession trained; heading out to gather.");
-        }
-    }
+    uint32 skillId = session.skillId ? session.skillId : GetGatheringSkill();
+    session.skillId = skillId;
+
+    // Always leave the trainer state behind: either training raised the cap
+    // (head out to gather) or it did not (missing prerequisites / money) - in
+    // which case the retry timer stops the state machine from flipping every
+    // engine tick.
+    session.nextTrainerAttempt = getMSTime() + sPlayerbotAIConfig.gatherLevelingTrainerRetrySeconds * 1000;
+    session.state = GatheringLevelingState::GATHERING;
+    session.trainerEntry = 0;
+    session.trainerSpawnId = 0;
+    session.trainerTravelStart = 0;
+
+    if (skillId && !NeedsRankUp(skillId))
+        botAI->TellMaster("Profession trained; heading out to gather.");
+    else if (skillId)
+        botAI->TellError("Trainer could not teach me right now; gathering with my current profession.");
 
     return true;
+}
+
+bool GatheringLevelingUpdateAction::PrepareTrainerTravel(GatheringSession& session)
+{
+    WorldPosition const from(bot);
+    PlayerbotTrainerRepository::TrainerEntry target;
+    bool found = (session.skillId && IsGatheringSkill(session.skillId))
+                     ? PlayerbotTrainerRepository::Instance().GetNearestTrainerForSkill(from, session.skillId, target)
+                     : PlayerbotTrainerRepository::Instance().GetNearestTrainerForAnyGatheringSkill(from, target);
+    if (!found)
+        return false;
+
+    session.trainerEntry = target.entry;
+    session.trainerSpawnId = target.spawnId;
+    session.trainerMapId = target.mapId;
+    session.trainerX = target.x;
+    session.trainerY = target.y;
+    session.trainerZ = target.z;
+    session.trainerTravelStart = getMSTime();
+    return true;
+}
+
+bool GatheringLevelingUpdateAction::TravelToTrainer(GatheringSession& session)
+{
+    uint32 now = getMSTime();
+
+    // Give up if the travel leg runs past its budget.
+    uint32 budgetMs = sPlayerbotAIConfig.gatherLevelingTravelBudgetSeconds * 1000;
+    if (budgetMs && session.trainerTravelStart && now - session.trainerTravelStart >= budgetMs)
+        return false;
+
+    // Let the current movement (walk / walk-to-flight-master / flight) finish
+    // before re-planning; never treat an in-progress move as failure.
+    if (bot->isMoving() || bot->HasUnitState(UNIT_STATE_IN_FLIGHT) || bot->IsFlying())
+        return true;
+
+    // Reached the trainer's location: try to interact with it.
+    if (session.trainerMapId == bot->GetMapId() &&
+        bot->GetExactDist(session.trainerX, session.trainerY, session.trainerZ) <= INTERACTION_DISTANCE)
+        return UseTrainer(session, ObjectGuid::Create<HighGuid::Unit>(session.trainerEntry, session.trainerSpawnId));
+
+    WorldPosition const dest(session.trainerMapId, session.trainerX, session.trainerY, session.trainerZ);
+
+    // A trainer on another map can only be reached through the taxi graph.
+    if (session.trainerMapId != bot->GetMapId())
+    {
+        if (!sPlayerbotAIConfig.taxiFlightEnabled)
+            return false;
+        return TaxiFlightAction(botAI).StartFlightTo(dest);
+    }
+
+    // Same map: prefer a taxi for long hops, otherwise walk.
+    if (sPlayerbotAIConfig.taxiFlightEnabled &&
+        bot->GetDistance(session.trainerX, session.trainerY, session.trainerZ) >=
+            sPlayerbotAIConfig.taxiFlightMinDistance &&
+        TaxiFlightAction(botAI).StartFlightTo(dest))
+        return true;
+
+    return MoveTo(session.trainerMapId, session.trainerX, session.trainerY, session.trainerZ, false, false, false,
+                  false);
+}
+
+void GatheringLevelingUpdateAction::GiveUpOnTrainer(GatheringSession& session)
+{
+    uint32 now = getMSTime();
+    session.nextTrainerAttempt = now + sPlayerbotAIConfig.gatherLevelingTrainerRetrySeconds * 1000;
+    session.trainerEntry = 0;
+    session.trainerSpawnId = 0;
+    session.trainerTravelStart = 0;
+    session.state = GatheringLevelingState::GATHERING;
+    botAI->TellError("No relevant trainer reachable; gathering with my current profession.");
+    if (!botAI->HasStrategy("gather", BOT_STATE_NON_COMBAT))
+        botAI->ChangeStrategy("+gather", BOT_STATE_NON_COMBAT);
 }
 
 void GatheringLevelingUpdateAction::RoamInZone(GatheringSession& session)
@@ -299,5 +418,8 @@ void GatheringLevelingUpdateAction::Finish(GatheringSession& session)
         return;
 
     session.state = GatheringLevelingState::FINISHED;
+    session.trainerEntry = 0;
+    session.trainerSpawnId = 0;
+    session.trainerTravelStart = 0;
     botAI->TellMaster("Done levelling gathering for now.");
 }

@@ -7,6 +7,7 @@
 #ifndef PLAYERBOTS_GATHERINGSESSIONVALUE_H
 #define PLAYERBOTS_GATHERINGSESSIONVALUE_H
 
+#include "ObjectGuid.h"
 #include "Value.h"
 
 // Finite state machine driving the "gather leveling" behaviour. Stored per
@@ -14,10 +15,11 @@
 // action and the trigger can share and mutate it between engine ticks.
 enum class GatheringLevelingState : uint8
 {
-    DISABLED = 0,  // not running
-    TO_TRAINER,    // travelling to / using a trainer (obtain or rank-up)
-    GATHERING,     // roaming the current zone, harvesting via the 'gather' strategy
-    FINISHED       // 30 min elapsed or profession maxed
+    DISABLED = 0,            // not running
+    TO_TRAINER,              // looking for / walking to a trainer in the area
+    TRAVELLING_TO_TRAINER,   // travelling (possibly by taxi) to a cached trainer
+    GATHERING,               // roaming the current zone, harvesting via the 'gather' strategy
+    FINISHED                 // 30 min elapsed or profession maxed
 };
 
 struct GatheringSession
@@ -27,6 +29,21 @@ struct GatheringSession
     uint32 startTime = 0;     // getMSTime() when the session began
     uint32 nextRoamTime = 0;  // throttle between roam waypoints
     bool started = false;     // session initialised for this bot
+
+    // Trainer rank-up pacing: A failed trainer probe backs off instead of
+    // flipping the state machine every engine tick. Probes (travel included)
+    // only run once this timer allows.
+    uint32 nextTrainerAttempt = 0;
+
+    // Committed trainer travel target (resolved from PlayerbotTrainerRepository).
+    // Cleared when the bot stops heading towards it.
+    uint32 trainerEntry = 0;
+    ObjectGuid::LowType trainerSpawnId = 0;
+    uint32 trainerMapId = 0;
+    float trainerX = 0.0f;
+    float trainerY = 0.0f;
+    float trainerZ = 0.0f;
+    uint32 trainerTravelStart = 0;  // getMSTime() when the travel leg began
 };
 
 class GatheringSessionValue : public ManualSetValue<GatheringSession>

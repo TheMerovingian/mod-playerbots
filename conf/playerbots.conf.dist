@@ -727,6 +727,17 @@ AiPlayerbot.GatherLevelingDurationMinutes = 30
 # Default: 100
 AiPlayerbot.GatherLevelingSearchRadius = 100.0
 
+# Seconds to back off between rank-up trainer attempts when an attempt fails
+# (no trainer in range / unreachable). Keeps a capped bot gathering while it
+# periodically pokes at the trainer instead of flipping state every tick.
+# Default: 60
+AiPlayerbot.GatherLevelingTrainerRetrySeconds = 60
+
+# Max seconds a bot commits to travelling towards a trainer (walk + taxi)
+# before giving up and returning to full-time gathering.
+# Default: 300 (5 minutes)
+AiPlayerbot.GatherLevelingTravelBudgetSeconds = 300
+
 # Which downtime gathering behaviour a bot may run, so the two never run at the
 # same time (a bot only ever schedules one gather activity):
 #   0 = 'gather leveling' only (visit trainers, level the profession)
