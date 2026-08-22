@@ -616,6 +616,17 @@ void AiFactory::AddDefaultNonCombatStrategies(Player* player, PlayerbotAI* const
     if (sPlayerbotAIConfig.auctionEnabled)
         nonCombatEngine->addStrategy("auction", false);
 
+    // Process trade materials into max-tier consumables / profession products
+    // before the raw auction sell runs (randombots only). Only wire the
+    // strategy for bots holding one of the production skills, so bots without
+    // them are not taxed by the per-tick heartbeat.
+    bool const hasProductionSkill = player->HasSkill(SKILL_ALCHEMY) || player->HasSkill(SKILL_JEWELCRAFTING) ||
+                                    player->HasSkill(SKILL_BLACKSMITHING) || player->HasSkill(SKILL_ENCHANTING) ||
+                                    player->HasSkill(SKILL_INSCRIPTION);
+    if (sPlayerbotAIConfig.auctionEnabled && sPlayerbotAIConfig.auctionProductionEnabled &&
+        sRandomPlayerbotMgr.IsRandomBot(player) && hasProductionSkill)
+        nonCombatEngine->addStrategy("auction production", false);
+
     if (sPlayerbotAIConfig.autoSaveMana && PlayerbotAI::IsHeal(player, true))
         nonCombatEngine->addStrategy("save mana", false);
 

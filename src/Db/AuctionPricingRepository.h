@@ -32,12 +32,21 @@ public:
         return instance;
     }
 
-    // Total (per-stack) listing price in copper for the given item, computed
-    // from the last recorded sale:
-    //   last_price * (short  -> +PriceIncreasePercent%, long -> -PriceDecreasePercent%)
+    // Per-unit listing price (copper) for the given item, computed from the
+    // persisted reference price stored in playerbots_auction_pricing:
+    //   reference * (short  -> +PriceIncreasePercent%, long -> -PriceDecreasePercent%)
     //   + window_count * 1 silver
-    // with a seed of VendorSellPrice * StartMultiplier when no sale is recorded yet.
-    uint32 CalculateListingPrice(ItemTemplate const* proto, uint32 now);
+    //
+    // When the item has never been sold and no reference exists yet, the seed
+    // is computed once and written into the pricing table (see the seed rules
+    // below); all later prices read that stored value back and fluctuate it.
+    //
+    // Seed rules:
+    //   * raw trade materials / regular listings (applyProductionFloor == false)
+    //     keep the plain `SellPrice * AuctionStartMultiplier` copper seed.
+    //   * production products (applyProductionFloor == true) are floored at
+    //     1 gold even when they have no vendor value (gems, enchants, ...).
+    uint32 CalculateListingPrice(ItemTemplate const* proto, uint32 now, bool applyProductionFloor = false);
 
     // Number of consecutive completed sales (ending with the most recent) where
     // each neighbouring pair is within `windowSeconds` of each other (chained).

@@ -9,6 +9,7 @@
 
 #include "AddLootAction.h"
 #include "AttackAction.h"
+#include "AuctionProductionActions.h"
 #include "AuctionSellAction.h"
 #include "ShareQuestAction.h"
 #include "BattleGroundTactics.h"
@@ -94,6 +95,7 @@ public:
         creators["gather leveling update"] = &ActionContext::gather_leveling_update;
         creators["gather resources update"] = &ActionContext::gather_resources_update;
         creators["auction sell"] = &ActionContext::auction_sell;
+        creators["auction production update"] = &ActionContext::auction_production_update;
         creators["move out of collision"] = &ActionContext::move_out_of_collision;
         creators["move random"] = &ActionContext::move_random;
         creators["attack"] = &ActionContext::melee;
@@ -362,6 +364,7 @@ private:
     static Action* gather_leveling_update(PlayerbotAI* botAI) { return new GatheringLevelingUpdateAction(botAI); }
     static Action* gather_resources_update(PlayerbotAI* botAI) { return new GatherResourcesController(botAI); }
     static Action* auction_sell(PlayerbotAI* botAI) { return new AuctionSellAction(botAI); }
+    static Action* auction_production_update(PlayerbotAI* botAI) { return new AuctionProductionUpdateAction(botAI); }
     static Action* add_loot(PlayerbotAI* botAI) { return new AddLootAction(botAI); }
     static Action* add_all_loot(PlayerbotAI* botAI) { return new AddAllLootAction(botAI); }
     static Action* loot(PlayerbotAI* botAI) { return new LootAction(botAI); }

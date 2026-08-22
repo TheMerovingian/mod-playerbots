@@ -7,6 +7,7 @@
 #ifndef PLAYERBOTS_TRIGGERCONTEXT_H
 #define PLAYERBOTS_TRIGGERCONTEXT_H
 
+#include "AuctionProductionTriggers.h"
 #include "CureTriggers.h"
 #include "FishingTriggers.h"
 #include "GatheringLevelingTriggers.h"
@@ -178,6 +179,7 @@ public:
         creators["no travel target"] = &TriggerContext::no_travel_target;
         creators["far from travel target"] = &TriggerContext::far_from_travel_target;
         creators["need gather leveling"] = &TriggerContext::need_gather_leveling;
+        creators["need auction production"] = &TriggerContext::need_auction_production;
         creators["no rti target"] = &TriggerContext::no_rti;
 
         creators["give food"] = &TriggerContext::give_food;
@@ -263,6 +265,7 @@ private:
     static Trigger* far_from_travel_target(PlayerbotAI* botAI) { return new FarFromTravelTargetTrigger(botAI); }
     static Trigger* no_travel_target(PlayerbotAI* botAI) { return new NoTravelTargetTrigger(botAI); }
     static Trigger* need_gather_leveling(PlayerbotAI* botAI) { return new NeedGatheringLevelingTrigger(botAI); }
+    static Trigger* need_auction_production(PlayerbotAI* botAI) { return new NeedAuctionProductionTrigger(botAI); }
     static Trigger* no_rpg_target(PlayerbotAI* botAI) { return new NoRpgTargetTrigger(botAI); }
     static Trigger* has_rpg_target(PlayerbotAI* botAI) { return new HasRpgTargetTrigger(botAI); }
     static Trigger* collision(PlayerbotAI* botAI) { return new CollisionTrigger(botAI); }

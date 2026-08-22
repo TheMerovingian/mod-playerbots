@@ -792,6 +792,61 @@ AiPlayerbot.AuctionDecreasePercent = 10
 # Default: 3
 AiPlayerbot.AuctionKeepStacks = 3
 
+# Enable the 'auction production' behaviour: randombots convert raw trade
+# materials into max-tier consumables / profession products (potions, flasks,
+# cut gems, weapon stones etc.) and list them on the auction house, running
+# before the raw 'auction sell' behaviour.
+# Default: 1 (enabled)
+AiPlayerbot.AuctionProductionEnabled = 1
+
+# Copies of a non-stackable product (gems, stones, scopes) produced per order;
+# each copy is listed as its own auction entry.
+# Default: 3
+AiPlayerbot.AuctionProductionBatchSize = 3
+
+# Maximum copies of a stackable product (potions / flasks) placed in a single
+# listing. Flasks have a stack size of 20 in the core data, so this reduces
+# flask listings down from their full stack size.
+# Default: 5
+AiPlayerbot.AuctionProductionStackSize = 5
+
+# Allow production to buy missing raw materials from the AH at the cheapest
+# buyout (items arrive by mail). When off, production only runs on owned stock.
+# Default: 1 (enabled)
+AiPlayerbot.AuctionProductionCanBuyMaterials = 1
+
+# Per-auction buyout cap for the material shortfall purchases (copper).
+# 0 = unlimited.
+# Default: 0
+AiPlayerbot.AuctionProductionMaxBuyoutPrice = 0
+
+# Pacing delay (ms) between craft casts while processing / crafting an order so
+# the module does not re-cast a recipe mid-cast.
+# Default: 3000
+AiPlayerbot.AuctionProductionCastDelay = 3000
+
+# Idle product reselection throttle (ms) for the catalogue AH scan. Higher =>
+# less frequent (cheaper) scans.
+# Default: 20000
+AiPlayerbot.AuctionProductionCheckInterval = 20000
+
+# Maximum time (ms) a bot is allowed to spend walking to an auctioneer to buy
+# shortfall materials before giving up the current order.
+# Default: 900000 (15 minutes)
+AiPlayerbot.AuctionProductionTravelBudget = 900000
+
+# Minimum enchanting skill rank for an enchant-vellum scroll to be eligible as a
+# production product. Enchanted Vellums are produced from the bot's own known
+# enchant spells (the scroll item id is read from the spell data, no hard-coded
+# item ids).
+# Default: 350
+AiPlayerbot.AuctionProductionEnchantMinSkill = 350
+
+# Minimum inscription skill rank for inscription-crafted goods (glyphs, ink
+# works, scrolls) to be eligible as production products.
+# Default: 350
+AiPlayerbot.AuctionProductionInscriptionMinSkill = 350
+
 #
 #
 ####################################################################################################

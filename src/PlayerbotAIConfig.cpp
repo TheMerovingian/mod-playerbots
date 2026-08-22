@@ -203,6 +203,23 @@ bool PlayerbotAIConfig::Initialize()
     auctionDecreasePercent = sConfigMgr->GetOption<uint32>("AiPlayerbot.AuctionDecreasePercent", 10);
     auctionKeepStacks = sConfigMgr->GetOption<uint32>("AiPlayerbot.AuctionKeepStacks", 3);
 
+    auctionProductionEnabled = sConfigMgr->GetOption<bool>("AiPlayerbot.AuctionProductionEnabled", true);
+    auctionProductionBatchSize = sConfigMgr->GetOption<uint32>("AiPlayerbot.AuctionProductionBatchSize", 3);
+    auctionProductionStackSize = sConfigMgr->GetOption<uint32>("AiPlayerbot.AuctionProductionStackSize", 5);
+    auctionProductionCanBuyMaterials =
+        sConfigMgr->GetOption<bool>("AiPlayerbot.AuctionProductionCanBuyMaterials", true);
+    auctionProductionMaxBuyoutPrice =
+        sConfigMgr->GetOption<uint32>("AiPlayerbot.AuctionProductionMaxBuyoutPrice", 0);
+    auctionProductionCastDelay = sConfigMgr->GetOption<uint32>("AiPlayerbot.AuctionProductionCastDelay", 3000);
+    auctionProductionCheckInterval =
+        sConfigMgr->GetOption<uint32>("AiPlayerbot.AuctionProductionCheckInterval", 20000);
+    auctionProductionTravelBudget =
+        sConfigMgr->GetOption<uint32>("AiPlayerbot.AuctionProductionTravelBudget", 15 * MINUTE * IN_MILLISECONDS);
+    auctionProductionEnchantMinSkill =
+        sConfigMgr->GetOption<uint32>("AiPlayerbot.AuctionProductionEnchantMinSkill", 350);
+    auctionProductionInscriptionMinSkill =
+        sConfigMgr->GetOption<uint32>("AiPlayerbot.AuctionProductionInscriptionMinSkill", 350);
+
     allowAccountBots = sConfigMgr->GetOption<bool>("AiPlayerbot.AllowAccountBots", true);
     allowGuildBots = sConfigMgr->GetOption<bool>("AiPlayerbot.AllowGuildBots", true);
     allowTrustedAccountBots = sConfigMgr->GetOption<bool>("AiPlayerbot.AllowTrustedAccountBots", true);

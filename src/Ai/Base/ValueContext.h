@@ -15,6 +15,7 @@
 #include "AttackerCountValues.h"
 #include "AttackerWithoutAuraTargetValue.h"
 #include "AttackersValue.h"
+#include "AuctionProductionValue.h"
 #include "AvailableLootValue.h"
 #include "BudgetValues.h"
 #include "CcTargetValue.h"
@@ -338,6 +339,7 @@ public:
         creators["combat start time"] = &ValueContext::combat_start_time;
         creators["gathering session"] = &ValueContext::gathering_session;
         creators["gather resources session"] = &ValueContext::gather_resources_session;
+        creators["auction production session"] = &ValueContext::auction_production_session;
     }
 
 private:
@@ -602,6 +604,10 @@ private:
     static UntypedValue* gather_resources_session(PlayerbotAI* botAI)
     {
         return new GatherResourcesSessionValue(botAI);
+    }
+    static UntypedValue* auction_production_session(PlayerbotAI* botAI)
+    {
+        return new AuctionProductionSessionValue(botAI);
     }
 };
 

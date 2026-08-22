@@ -7,6 +7,7 @@
 #include "AuctionPricingRepository.h"
 
 #include <algorithm>
+#include <limits>
 #include <vector>
 
 #include "DatabaseEnv.h"
@@ -15,7 +16,8 @@
 #include "PlayerbotAIConfig.h"
 #include "QueryResult.h"
 
-uint32 AuctionPricingRepository::CalculateListingPrice(ItemTemplate const* proto, uint32 now)
+uint32 AuctionPricingRepository::CalculateListingPrice(ItemTemplate const* proto, uint32 now,
+                                                       bool applyProductionFloor)
 {
     if (!proto)
         return 0;
@@ -23,38 +25,52 @@ uint32 AuctionPricingRepository::CalculateListingPrice(ItemTemplate const* proto
     uint32 const itemEntry = proto->ItemId;
     uint32 const windowSeconds = sPlayerbotAIConfig.auctionWindowSeconds > 0 ? sPlayerbotAIConfig.auctionWindowSeconds : 30;
 
-    // Last recorded completed sale for this item.
-    uint32 lastUnitPrice = 0;
-    uint32 duration = 0;
+    // Reference price persisted for this item. Populated once (either by a real
+    // completed sale, RecordSale, or by the first-ever seed below); every later
+    // price is computed from this stored value and fluctuated.
+    uint32 referencePrice = 0;
+    uint32 referenceAt = 0;
     {
         QueryResult result = PlayerbotsDatabase.Query(
-            "SELECT sale_price, stack_size, time_listed, time_sold FROM playerbots_auction_sale_history "
-            "WHERE item_id = {} AND time_sold > 0 ORDER BY time_sold DESC LIMIT 1",
+            "SELECT last_sold_price, last_sold_at FROM playerbots_auction_pricing WHERE item_entry = {}",
             itemEntry);
 
         if (result)
         {
             Field* fields = result->Fetch();
-            uint32 const salePrice = fields[0].Get<uint32>();
-            uint32 const stackSize = fields[1].Get<uint32>();
-            uint32 const timeListed = fields[2].Get<uint32>();
-            uint32 const timeSold = fields[3].Get<uint32>();
-            lastUnitPrice = salePrice / (stackSize > 0 ? stackSize : 1);
-            duration = timeSold > timeListed ? timeSold - timeListed : 0;
+            referencePrice = fields[0].Get<uint32>();
+            referenceAt = fields[1].Get<uint32>();
         }
     }
 
-    // No history yet: seed from the item's vendor value (default 5x).
-    if (!lastUnitPrice)
+    // The item has never been sold (or no reference exists yet): the price
+    // setting mechanism runs once and populates the database. All later listing
+    // prices for the item are read back from the database and fluctuated below
+    // instead of being recomputed.
+    if (referencePrice == 0)
     {
         uint32 const startMultiplier = std::max<uint32>(sPlayerbotAIConfig.auctionStartMultiplier, 1);
-        return std::max<uint32>(proto->SellPrice * startMultiplier, 1);
+        uint64 const base = std::max<uint64>(
+            static_cast<uint64>(proto->SellPrice) * startMultiplier,
+            applyProductionFloor ? static_cast<uint64>(GOLD)
+                                 : 1);  // raw trade materials keep the plain copper seed
+
+        PlayerbotsDatabase.Execute(
+            "INSERT INTO playerbots_auction_pricing (item_entry, last_sold_price, last_sold_at) VALUES ({}, {}, {}) "
+            "ON DUPLICATE KEY UPDATE last_sold_price = {}, last_sold_at = {}",
+            itemEntry, base, now, base, now);
+
+        return static_cast<uint32>(std::min<uint64>(base, std::numeric_limits<uint32>::max()));
     }
 
-    long long adjusted = lastUnitPrice;
+    // Referenced from the database and fluctuated via the prescribed mechanism:
+    //   reference * (short -> +PriceIncreasePercent, long -> -PriceDecreasePercent)
+    //   + window_count * 1 silver
+    long long adjusted = referencePrice;
     constexpr uint32 ONE_DAY = 24 * 60 * 60;
+    uint32 const referenceAge = now > referenceAt ? now - referenceAt : 0;
 
-    if (duration > ONE_DAY)
+    if (referenceAge > ONE_DAY)
     {
         uint32 const decrease = std::min<uint32>(sPlayerbotAIConfig.auctionDecreasePercent, 100);
         adjusted = adjusted * (100 - decrease) / 100;
