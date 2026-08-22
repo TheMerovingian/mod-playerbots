@@ -43,10 +43,12 @@ public:
         None = 0,        // not running
         ChooseProduct,   // pick the fewest-listed catalog product
         Plan,            // resolve recipe graph + batch size / material needs
-        BuyMaterials,    // buy leftover materials from the AH (travel first)
+        BuyVendor,       // buy vendor-sold reagent parts (vials / flasks) from a vendor
+        BuyMaterials,    // buy remaining collectable materials from the AH (travel first)
         RetrieveMail,    // collect bought materials from a mailbox
         ProcessSteps,    // cast prerequisite crafts (smelt / prospect / ...)
         Craft,           // cast the final recipe until the batch is finished
+        GatherMaterials, // hand off to the gathering behaviour for missing collectables
         Post,            // list the produced goods
         Exit             // done, clear the session
     };
@@ -61,14 +63,23 @@ public:
 
     std::vector<AuctionCraftStep> recipe;  // ordered craft steps (process steps first)
     std::map<uint32, uint32> totalNeeds;  // leaf material id -> copies the whole order needs
-    std::map<uint32, uint32> shortfall;   // leaf material id -> copies still missing after bags
+    std::map<uint32, uint32> shortfall;   // AH-buyable leaves: id -> copies to buy / awaiting mail
+    std::map<uint32, uint32> vendorNeeds; // vendor-sold leaves: id -> copies to buy from a vendor
+    std::map<uint32, uint32> gatherNeeds; // collectable leaves: id -> copies the bot will gather itself
+    uint32 gatherSkillId = 0;            // gathering skill used for the gather handoff
+    uint32 gatherTier = 0;               // requested node / skin tier for the gather handoff
 
     std::vector<uint32> reserved;  // item ids reserved for this order (AuctionSellAction skips them)
 
     bool travelSet = false;    // rpg -> auctioneer / mailbox travel destination resolved
     bool insufficientFunds = false;  // buyout shortfall could not be afforded
     uint32 lastSelection = 0;  // getMSTime() of the last idle product selection (throttle)
-    uint32 buyStart = 0;       // getMSTime() when travelling to an auctioneer began (travel budget)
+    uint32 buyStart = 0;       // getMSTime() when travelling to an auctioneer begun (travel budget)
+    uint32 vendorStart = 0;    // getMSTime() when travelling to a vendor began (travel budget)
+    uint32 gatherAttempts = 0; // production handoff re-requests to the gathering behaviour
+    bool gatherRequested = false;    // the gather behaviour currently carries (or ran) our request
+    bool hadGatherResources = false; // gather resources strategy was force-enabled for the handoff
+    bool hadGatherLeveling = false;  // gather leveling strategy was disabled during the handoff
 
     bool IsActive() const { return phase != Phase::None; }
 
@@ -84,11 +95,20 @@ public:
         recipe.clear();
         totalNeeds.clear();
         shortfall.clear();
+        vendorNeeds.clear();
+        gatherNeeds.clear();
+        gatherSkillId = 0;
+        gatherTier = 0;
         reserved.clear();
         travelSet = false;
         insufficientFunds = false;
         lastSelection = 0;
         buyStart = 0;
+        vendorStart = 0;
+        gatherAttempts = 0;
+        gatherRequested = false;
+        hadGatherResources = false;
+        hadGatherLeveling = false;
     }
 };
 

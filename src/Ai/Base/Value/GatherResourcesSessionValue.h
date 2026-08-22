@@ -55,6 +55,15 @@ struct GatherResourcesSession
     uint32 nextStart = 0;       // getMSTime() before which a new session may not start
     bool reserved = false;      // a zone-counter reservation row is held for this run
     bool started = false;       // session initialised for this bot
+
+    // Production handoff request: set by the "auction production" behaviour
+    // when it needs materials the bot can collect itself (a missing herb / ore /
+    // leather). When set, the controller targets that profession's zones for
+    // the requested tier (0 = let the controller pick) and clears the override
+    // + pokes production once the run finishes.
+    uint32 targetItemId = 0;   // specific material the production order needs
+    uint32 targetSkillId = 0;  // gathering skill that collects it
+    uint32 targetTier = 0;     // requested node / skin tier (0 = auto)
 };
 
 class GatherResourcesSessionValue : public ManualSetValue<GatherResourcesSession>

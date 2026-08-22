@@ -12,6 +12,7 @@
 #include <list>
 #include <set>
 
+#include "AuctionProductionValue.h"
 #include "Bag.h"
 #include "CellImpl.h"
 #include "Creature.h"
@@ -53,13 +54,16 @@ namespace
 
 bool GatherResourcesController::isUseful()
 {
-    if (!sPlayerbotAIConfig.gatherResourcesEnabled)
+    GatherResourcesSession& session = AI_VALUE_REF(GatherResourcesSession, "gather resources session");
+
+    // A production handoff request runs even when the downtime gather behaviour
+    // is toggled off - the treasury flow is opt-in and should still be served.
+    if (!sPlayerbotAIConfig.gatherResourcesEnabled && !session.targetItemId)
         return false;
 
     if (!HasGatheringSkill())
         return false;
 
-    GatherResourcesSession& session = AI_VALUE_REF(GatherResourcesSession, "gather resources session");
     if (session.state != GR_STATE_DISABLED)
         return true;
 
@@ -71,10 +75,10 @@ bool GatherResourcesController::isUseful()
 
 bool GatherResourcesController::Execute(Event /*event*/)
 {
-    if (!sPlayerbotAIConfig.gatherResourcesEnabled)
-        return false;
-
     GatherResourcesSession& session = AI_VALUE_REF(GatherResourcesSession, "gather resources session");
+
+    if (!sPlayerbotAIConfig.gatherResourcesEnabled && !session.targetItemId)
+        return false;
 
     if (session.state == GR_STATE_DISABLED)
     {
@@ -124,7 +128,7 @@ bool GatherResourcesController::Execute(Event /*event*/)
 void GatherResourcesController::BeginSession(GatherResourcesSession& session)
 {
     session.started = true;
-    session.skillId = GetGatheringSkill();
+    session.skillId = session.targetSkillId ? session.targetSkillId : GetGatheringSkill();
     session.tier = 0;
     session.state = GR_STATE_SELECTING;
     session.sessionStart = getMSTime();
@@ -134,7 +138,8 @@ void GatherResourcesController::BeginSession(GatherResourcesSession& session)
     session.skinMonsters.clear();
     session.zones.clear();
     session.zoneIndex = 0;
-    botAI->TellMaster("I'm heading out to gather some resources.");
+    botAI->TellMaster(session.targetItemId ? "I'm going to gather materials for crafting."
+                                           : "I'm heading out to gather some resources.");
 }
 
 bool GatherResourcesController::HasGatheringSkill()
@@ -176,6 +181,11 @@ void GatherResourcesController::HandleSelecting(GatherResourcesSession& session)
     session.zones.clear();
     session.zoneIndex = 0;
 
+    // A production request pins the gathering skill to collect its material;
+    // default behaviour picks the bot's best gathering profession.
+    if (session.targetSkillId)
+        session.skillId = session.targetSkillId;
+
     // Collect every tier value the bot could realistically gather on the server.
     std::set<uint32> tiers;
     if (IsSkinningSkill(session.skillId))
@@ -203,17 +213,23 @@ void GatherResourcesController::HandleSelecting(GatherResourcesSession& session)
         return;
     }
 
-    // Choose tier: highest-available vs random, split by the configured percent.
-    bool wantHighest = urand(0, 99) < sPlayerbotAIConfig.gatherResourceHighestPriorityPercent;
-    if (wantHighest)
-        session.tier = *tiers.rbegin();
+    // Choose tier: a production request targets the material's required tier
+    // when the bot can handle it, otherwise the highest available one.
+    if (session.targetTier > 0 && tiers.count(session.targetTier))
+        session.tier = session.targetTier;
     else
     {
-        size_t idx = urand(0, tiers.size() - 1);
-        auto it = tiers.begin();
-        for (size_t k = 0; k < idx; ++k)
-            ++it;
-        session.tier = *it;
+        bool wantHighest = urand(0, 99) < sPlayerbotAIConfig.gatherResourceHighestPriorityPercent;
+        if (wantHighest)
+            session.tier = *tiers.rbegin();
+        else
+        {
+            size_t idx = urand(0, tiers.size() - 1);
+            auto it = tiers.begin();
+            for (size_t k = 0; k < idx; ++k)
+                ++it;
+            session.tier = *it;
+        }
     }
 
     // Build zones holding that tier, then pick with congestion avoidance.
@@ -550,5 +566,17 @@ void GatherResourcesController::FinishSessionForRetry(GatherResourcesSession& se
     session.zones.clear();
     session.zoneIndex = 0;
     session.nextStart = getMSTime() + sPlayerbotAIConfig.gatherResourceCooldownMinutes * 60u * 1000u;
+
+    // If this run was fulfilling an "auction production" material request, hand
+    // control back once the gathering run completes so the order resumes.
+    if (session.targetItemId)
+    {
+        session.targetItemId = 0;
+        session.targetSkillId = 0;
+        session.targetTier = 0;
+        AI_VALUE_REF(AuctionProductionSession, "auction production session").lastSelection = 0;
+        LOG_INFO("playerbots.auction", "AuctionProduction gather run finished, resuming order");
+    }
+
     botAI->TellMaster("Gathering run finished for now.");
 }
