@@ -497,6 +497,10 @@ public:
     uint32 botTaxiGapMs;
     uint32 botTaxiGapJitterMs;
 
+    // Autonomous taxi/flight path travel for long distances.
+    bool taxiFlightEnabled;
+    float taxiFlightMinDistance;
+
     std::string const GetTimestampStr();
     bool hasLog(std::string const fileName)
     {

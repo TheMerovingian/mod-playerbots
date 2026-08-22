@@ -35,12 +35,20 @@
 #include "StatsWeightCalculator.h"
 #include "Timer.h"
 #include "TravelMgr.h"
+#include "TravelFlightAction.h"
 #include "G3D/Vector2.h"
 
 bool NewRpgBaseAction::MoveFarTo(WorldPosition dest)
 {
     if (dest == WorldPosition())
         return false;
+
+    // For truly long journeys prefer flying along an optimal taxi route instead
+    // of blindly walking. While the taxi handles movement the caller is told to
+    // wait; when no (worthwhile/affordable/reachable) route exists this returns
+    // false and we fall through to the normal walk/teleport logic below.
+    if (TaxiFlightAction(botAI).StartFlightTo(dest))
+        return true;
 
     if (dest != botAI->rpgInfo.moveFarPos)
     {

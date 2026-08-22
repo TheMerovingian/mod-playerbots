@@ -518,6 +518,10 @@ bool PlayerbotAIConfig::Initialize()
     botTaxiGapMs = sConfigMgr->GetOption<uint32>("AiPlayerbot.BotTaxiGapMs", 200);
     botTaxiGapJitterMs = sConfigMgr->GetOption<uint32>("AiPlayerbot.BotTaxiGapJitterMs", 100);
 
+    // Autonomous taxi/flight path travel for long distances.
+    taxiFlightEnabled = sConfigMgr->GetOption<bool>("AiPlayerbot.TaxiFlightEnabled", true);
+    taxiFlightMinDistance = sConfigMgr->GetOption<float>("AiPlayerbot.TaxiFlightMinDistance", 650.0f);
+
     LOG_INFO("server.loading", "Loading TalentSpecs...");
 
     for (uint32 cls = 1; cls < MAX_CLASSES; ++cls)
