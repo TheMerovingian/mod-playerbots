@@ -11,15 +11,16 @@
 
 class PlayerbotAI;
 
-// Fires when the "auction production" behaviour is enabled and the randombot
-// knows at least one recipe that produces a catalog product while idle and out
-// of combat. The update action then still de-opts per tick (affordability /
+// Fires while the "auction production" behaviour is enabled and the randombot
+// either has an order in flight (the state machine heartbeat must keep winning
+// engine ticks) or knows a recipe that produces a catalog product while idle
+// and out of combat. The update action still de-opts per tick (affordability /
 // listing counts) before anything is crafted.
 class NeedAuctionProductionTrigger : public Trigger
 {
 public:
     NeedAuctionProductionTrigger(PlayerbotAI* botAI)
-        : Trigger(botAI, "need auction production", 5000)
+        : Trigger(botAI, "need auction production", 500)
     {
     }
 

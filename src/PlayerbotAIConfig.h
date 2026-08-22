@@ -357,6 +357,7 @@ public:
     uint32 auctionProductionMaxBuyoutPrice;  // per-auction buyout cap (0 = unlimited)
     uint32 auctionProductionCastDelay;       // pacing between craft casts (ms)
     uint32 auctionProductionCheckInterval;   // idle product reselect throttle (ms)
+    uint32 auctionProductionTravelBudget;    // max time walking to an auctioneer (ms)
     uint32 auctionProductionEnchantMinSkill;  // min enchanting skill for vellum-scroll products
     uint32 auctionProductionInscriptionMinSkill;  // min inscription skill for glyph products
 

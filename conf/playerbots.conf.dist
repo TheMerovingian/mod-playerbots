@@ -830,6 +830,11 @@ AiPlayerbot.AuctionProductionCastDelay = 3000
 # Default: 20000
 AiPlayerbot.AuctionProductionCheckInterval = 20000
 
+# Maximum time (ms) a bot is allowed to spend walking to an auctioneer to buy
+# shortfall materials before giving up the current order.
+# Default: 900000 (15 minutes)
+AiPlayerbot.AuctionProductionTravelBudget = 900000
+
 # Minimum enchanting skill rank for an enchant-vellum scroll to be eligible as a
 # production product. Enchanted Vellums are produced from the bot's own known
 # enchant spells (the scroll item id is read from the spell data, no hard-coded

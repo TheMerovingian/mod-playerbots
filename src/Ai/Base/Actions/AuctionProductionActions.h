@@ -101,6 +101,7 @@ private:
     bool EnsureAtAuctioneer();
     Creature* FindAuctioneer();
     bool FindMailbox(ObjectGuid& mailbox);
+    bool EnsureAtMailbox();
 
     bool BuyShortfall(AuctionProductionSession& session);
     void TakeMailWithItems();

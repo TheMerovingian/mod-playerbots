@@ -213,6 +213,8 @@ bool PlayerbotAIConfig::Initialize()
     auctionProductionCastDelay = sConfigMgr->GetOption<uint32>("AiPlayerbot.AuctionProductionCastDelay", 3000);
     auctionProductionCheckInterval =
         sConfigMgr->GetOption<uint32>("AiPlayerbot.AuctionProductionCheckInterval", 20000);
+    auctionProductionTravelBudget =
+        sConfigMgr->GetOption<uint32>("AiPlayerbot.AuctionProductionTravelBudget", 15 * MINUTE * IN_MILLISECONDS);
     auctionProductionEnchantMinSkill =
         sConfigMgr->GetOption<uint32>("AiPlayerbot.AuctionProductionEnchantMinSkill", 350);
     auctionProductionInscriptionMinSkill =

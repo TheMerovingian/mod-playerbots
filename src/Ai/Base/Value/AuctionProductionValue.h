@@ -68,7 +68,7 @@ public:
     bool travelSet = false;    // rpg -> auctioneer / mailbox travel destination resolved
     bool insufficientFunds = false;  // buyout shortfall could not be afforded
     uint32 lastSelection = 0;  // getMSTime() of the last idle product selection (throttle)
-    uint32 buyRetries = 0;     // failed attempts to reach an auctioneer while buying
+    uint32 buyStart = 0;       // getMSTime() when travelling to an auctioneer began (travel budget)
 
     bool IsActive() const { return phase != Phase::None; }
 
@@ -88,7 +88,7 @@ public:
         travelSet = false;
         insufficientFunds = false;
         lastSelection = 0;
-        buyRetries = 0;
+        buyStart = 0;
     }
 };
 

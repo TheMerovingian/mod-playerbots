@@ -120,6 +120,29 @@ namespace
 
         return false;
     }
+
+    // The rpg travel destination set (TravelMgr::rpgNpcs) is not populated on
+    // this branch, so AuctionProduction cannot find auctioneers through
+    // getRpgTravelDestinations. Scan creature spawn data directly instead
+    // (built lazily, once).
+    std::vector<WorldPosition>& AuctioneerSpawns()
+    {
+        static std::vector<WorldPosition> spawns = []()
+        {
+            std::vector<WorldPosition> result;
+            for (auto const& itr : sObjectMgr->GetAllCreatureData())
+            {
+                CreatureData const& data = itr.second;
+                CreatureTemplate const* cInfo = sObjectMgr->GetCreatureTemplate(data.id);
+                if (!cInfo || !(cInfo->npcflag & UNIT_NPC_FLAG_AUCTIONEER))
+                    continue;
+
+                result.emplace_back(data.mapid, data.posX, data.posY, data.posZ, 0.0f);
+            }
+            return result;
+        }();
+        return spawns;
+    }
 }  // namespace
 
 std::vector<AuctionProductionCatalog::Product> AuctionProductionCatalog::EnchantProducts(Player* bot)
@@ -464,21 +487,26 @@ bool AuctionProductionUpdateAction::Execute(Event /*event*/)
         case AuctionProductionSession::Phase::BuyMaterials:
             if (!EnsureAtAuctioneer())
             {
-                if (++session.buyRetries > 20)
+                // Walking to an auctioneer can take a while; give the bot a
+                // travel budget instead of counting per-tick retries.
+                uint32 const now = getMSTime();
+                if (!session.buyStart)
+                    session.buyStart = now;
+                else if (now - session.buyStart > sPlayerbotAIConfig.auctionProductionTravelBudget)
                 {
                     LOG_WARN("playerbots.auction", "AuctionProduction {} gave up reaching an auctioneer",
                              bot->GetGUID().ToString());
                     FinishSession(session);
                 }
-                else
-                    SetNextCheckDelay(sPlayerbotAIConfig.reactDelay);
 
                 return true;
             }
 
+            session.buyStart = 0;
             BuyShortfall(session);
             break;
         case AuctionProductionSession::Phase::RetrieveMail:
+        {
             if (session.shortfall.empty())
             {
                 session.phase = session.recipe.size() > 1 ? AuctionProductionSession::Phase::ProcessSteps
@@ -502,7 +530,7 @@ bool AuctionProductionUpdateAction::Execute(Event /*event*/)
 
             if (!ready)
             {
-                SetNextCheckDelay(500);
+                botAI->SetNextCheckDelay(500);
                 return true;
             }
 
@@ -510,6 +538,7 @@ bool AuctionProductionUpdateAction::Execute(Event /*event*/)
             session.phase = session.recipe.size() > 1 ? AuctionProductionSession::Phase::ProcessSteps
                                                       : AuctionProductionSession::Phase::Craft;
             break;
+        }
         case AuctionProductionSession::Phase::ProcessSteps:
             RunProcessSteps(session);
             break;
@@ -635,7 +664,7 @@ bool AuctionProductionUpdateAction::PlanOrder(AuctionProductionSession& session,
     session.perListing = batch;
     session.crafted = CountOwned(product.itemId);  // baseline owned product count
     session.nextStep = 0;
-    session.buyRetries = 0;
+    session.buyStart = 0;
     session.insufficientFunds = false;
     session.reserved.clear();
     session.totalNeeds.clear();
@@ -662,6 +691,8 @@ bool AuctionProductionUpdateAction::PlanOrder(AuctionProductionSession& session,
 
     // Deduct bag inventory from the required leaves (respecting the keep-stack
     // floor, except for enchanting materials which are fully consumable).
+    session.totalNeeds = leafNeeds;
+
     session.shortfall.clear();
     for (auto const& leaf : leafNeeds)
     {
@@ -732,25 +763,18 @@ bool AuctionProductionUpdateAction::EnsureAtAuctioneer()
 
     if (!auctioneer)
     {
-        // Not in sight: travel to the nearest known auctioneer destination.
+        // Not in sight: travel to the nearest known auctioneer spawn.
         WorldPosition botPos(bot);
-        TravelDestination* best = nullptr;
+        WorldPosition const* best = nullptr;
         float bestDist = std::numeric_limits<float>::max();
 
-        for (TravelDestination* dest : TravelMgr::instance().getRpgTravelDestinations(bot, true, true))
+        for (WorldPosition& pos : AuctioneerSpawns())
         {
-            if (!dest->getEntry())
-                continue;
-
-            CreatureTemplate const* cInfo = sObjectMgr->GetCreatureTemplate(dest->getEntry());
-            if (!cInfo || !(cInfo->npcflag & UNIT_NPC_FLAG_AUCTIONEER))
-                continue;
-
-            float const dist = dest->distanceTo(&botPos);
+            float const dist = pos.distance(&botPos);
             if (dist < bestDist)
             {
                 bestDist = dist;
-                best = dest;
+                best = &pos;
             }
         }
 
@@ -761,13 +785,8 @@ bool AuctionProductionUpdateAction::EnsureAtAuctioneer()
             return false;
         }
 
-        if (std::vector<WorldPosition*> points = best->nextPoint(&botPos, true); !points.empty())
-        {
-            MoveTo(points.front()->GetMapId(), points.front()->GetPositionX(), points.front()->GetPositionY(),
-                   points.front()->GetPositionZ());
-            return false;
-        }
-
+        MoveTo(best->GetMapId(), best->GetPositionX(), best->GetPositionY(), best->GetPositionZ(),
+               false, false, false, false);
         return false;
     }
 
@@ -786,14 +805,14 @@ bool AuctionProductionUpdateAction::EnsureAtMailbox()
     ObjectGuid mailbox;
     if (!FindMailbox(mailbox))
     {
-        SetNextCheckDelay(sPlayerbotAIConfig.reactDelay);
+        botAI->SetNextCheckDelay(sPlayerbotAIConfig.reactDelay);
         return false;
     }
 
     GameObject* go = botAI->GetGameObject(mailbox);
     if (!go)
     {
-        SetNextCheckDelay(sPlayerbotAIConfig.reactDelay);
+        botAI->SetNextCheckDelay(sPlayerbotAIConfig.reactDelay);
         return false;
     }
 
@@ -960,7 +979,7 @@ void AuctionProductionUpdateAction::RunProcessSteps(AuctionProductionSession& se
                 return;
 
             if (CastStep(step))
-                SetNextCheckDelay(sPlayerbotAIConfig.auctionProductionCastDelay);
+                botAI->SetNextCheckDelay(sPlayerbotAIConfig.auctionProductionCastDelay);
             else
                 session.phase = AuctionProductionSession::Phase::Exit;
 
@@ -988,7 +1007,7 @@ void AuctionProductionUpdateAction::RunCraft(AuctionProductionSession& session)
 
     AuctionCraftStep const& step = session.recipe.back();
     if (CastStep(step))
-        SetNextCheckDelay(sPlayerbotAIConfig.auctionProductionCastDelay);
+        botAI->SetNextCheckDelay(sPlayerbotAIConfig.auctionProductionCastDelay);
     else
     {
         LOG_WARN("playerbots.auction", "AuctionProduction {} cannot craft {} (spell {})",
