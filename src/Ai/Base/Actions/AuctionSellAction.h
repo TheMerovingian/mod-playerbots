@@ -44,7 +44,12 @@ public:
 
     static ListingKind Classify(Item* item);
     static bool CanDisenchant(PlayerbotAI* botAI, Item* item);
-    static bool PostItem(PlayerbotAI* botAI, Item* item, uint32 postCount);
+
+    // Posts `postCount` copies of `item` on the auction house. `productionPrice`
+    // flags a production-catalog product: pricing applies the minimum listing
+    // floor and tradable items without a vendor value are allowed through, while
+    // bind-on-pickup / soulbound items remain rejected.
+    static bool PostItem(PlayerbotAI* botAI, Item* item, uint32 postCount, bool productionPrice = false);
 };
 
 #endif

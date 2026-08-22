@@ -8,6 +8,7 @@
 #define PLAYERBOTS_STRATEGYCONTEXT_H
 
 #include "AggressiveStrategy.h"
+#include "AuctionProductionStrategy.h"
 #include "AuctionStrategy.h"
 #include "AttackEnemyPlayersStrategy.h"
 #include "BattlegroundStrategy.h"
@@ -70,6 +71,7 @@ public:
         creators["gather leveling"] = &StrategyContext::gather_leveling;
         creators["gather resources"] = &StrategyContext::gather_resources;
         creators["auction"] = &StrategyContext::auction;
+        creators["auction production"] = &StrategyContext::auction_production;
         creators["emote"] = &StrategyContext::emote;
         creators["passive"] = &StrategyContext::passive;
         creators["aggressive"] = &StrategyContext::aggressive;
@@ -160,6 +162,7 @@ private:
     static Strategy* gather_leveling(PlayerbotAI* botAI) { return new GatheringLevelingStrategy(botAI); }
     static Strategy* gather_resources(PlayerbotAI* botAI) { return new GatherResourcesStrategy(botAI); }
     static Strategy* auction(PlayerbotAI* botAI) { return new AuctionStrategy(botAI); }
+    static Strategy* auction_production(PlayerbotAI* botAI) { return new AuctionProductionStrategy(botAI); }
     static Strategy* emote(PlayerbotAI* botAI) { return new EmoteStrategy(botAI); }
     static Strategy* passive(PlayerbotAI* botAI) { return new PassiveStrategy(botAI); }
     static Strategy* aggressive(PlayerbotAI* botAI) { return new AggressiveStrategy(botAI); }

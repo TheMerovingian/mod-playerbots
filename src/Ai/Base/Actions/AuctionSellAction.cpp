@@ -6,11 +6,13 @@
 
 #include "AuctionSellAction.h"
 
+#include <algorithm>
 #include <unordered_map>
 #include <unordered_set>
 
 #include "AuctionHouseMgr.h"
 #include "AuctionPricingRepository.h"
+#include "AuctionProductionValue.h"
 #include "DatabaseEnv.h"
 #include "Event.h"
 #include "Item.h"
@@ -117,6 +119,11 @@ bool AuctionSellAction::Execute(Event /*event*/)
     AuctionGatherVisitor visitor;
     IterateItems(&visitor, ITERATE_ITEMS_IN_BAGS);
 
+    // The "auction production" behaviour reserves raw trade materials and
+    // intermediates for an in-flight order; those entries are not listed raw.
+    AuctionProductionSession const& production = AI_VALUE_REF(AuctionProductionSession, "auction production session");
+    bool const productionActive = production.IsActive();
+
     bool changed = false;
 
     for (auto& group : visitor.groups)
@@ -124,6 +131,10 @@ bool AuctionSellAction::Execute(Event /*event*/)
         Item* first = group.second.front();
         ListingKind kind = Classify(first);
         if (kind == ListingKind::NotListed)
+            continue;
+
+        if (productionActive && std::find(production.reserved.begin(), production.reserved.end(), group.first) !=
+                                    production.reserved.end())
             continue;
 
         // BoE greens: preferred to disenchant for enchanting-profession bots,
@@ -207,7 +218,7 @@ bool AuctionSellAction::Execute(Event /*event*/)
     return changed;
 }
 
-bool AuctionSellAction::PostItem(PlayerbotAI* botAI, Item* item, uint32 postCount)
+bool AuctionSellAction::PostItem(PlayerbotAI* botAI, Item* item, uint32 postCount, bool productionPrice)
 {
     if (!item || !botAI || !postCount || postCount > item->GetCount())
         return false;
@@ -217,7 +228,12 @@ bool AuctionSellAction::PostItem(PlayerbotAI* botAI, Item* item, uint32 postCoun
         return false;
 
     ItemTemplate const* proto = item->GetTemplate();
-    if (!proto || proto->Bonding == BIND_WHEN_PICKED_UP || proto->SellPrice <= 0)
+    if (!proto || proto->Bonding == BIND_WHEN_PICKED_UP || item->IsSoulBound())
+        return false;
+
+    // Vendors-tradeable goods with no vendor value are normally refused; the
+    // production behaviour lists those (enchant / gem products) instead.
+    if (!productionPrice && proto->SellPrice <= 0)
         return false;
 
     AuctionHouseEntry const* ahEntry = sAuctionMgr->GetAuctionHouseEntryFromFactionTemplate(bot->GetFaction());
@@ -227,7 +243,7 @@ bool AuctionSellAction::PostItem(PlayerbotAI* botAI, Item* item, uint32 postCoun
     AuctionHouseObject* auctionHouse = sAuctionMgr->GetAuctionsMap(bot->GetFaction());
 
     uint32 const now = time(nullptr);
-    uint32 const unitPrice = sAuctionPricingRepository.CalculateListingPrice(proto, now);
+    uint32 const unitPrice = sAuctionPricingRepository.CalculateListingPrice(proto, now, productionPrice);
     uint32 const listingPrice = unitPrice * postCount;
     uint32 const buyout = listingPrice * std::max<uint32>(sPlayerbotAIConfig.auctionBuyoutMultiplier, 1);
     uint32 const stackSize = proto->GetMaxStackSize() > 1 ? postCount : 0;

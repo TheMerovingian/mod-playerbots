@@ -348,6 +348,18 @@ public:
     uint32 auctionDecreasePercent;
     uint32 auctionKeepStacks;
 
+    // "auction production" behaviour: converts raw trade materials into
+    // max-tier consumables / profession products and lists them on the AH.
+    bool auctionProductionEnabled;
+    uint32 auctionProductionBatchSize;      // copies per batch for singles
+    uint32 auctionProductionStackSize;      // max copies per stackable listing (flasks -> 5)
+    bool auctionProductionCanBuyMaterials;  // allow buyout shortfall from the AH
+    uint32 auctionProductionMaxBuyoutPrice;  // per-auction buyout cap (0 = unlimited)
+    uint32 auctionProductionCastDelay;       // pacing between craft casts (ms)
+    uint32 auctionProductionCheckInterval;   // idle product reselect throttle (ms)
+    uint32 auctionProductionEnchantMinSkill;  // min enchanting skill for vellum-scroll products
+    uint32 auctionProductionInscriptionMinSkill;  // min inscription skill for glyph products
+
     std::mutex m_logMtx;
     bool enableAutoTradeOnItemMention;
     std::vector<std::string> tradeActionExcludedPrefixes;
