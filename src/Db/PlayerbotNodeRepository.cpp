@@ -60,6 +60,14 @@ void PlayerbotNodeRepository::Repopulate()
 
         WorldPosition point(gd.mapid, gd.posX, gd.posY, gd.posZ);
         uint32 zoneId = point.getAreaId();
+        // Resolve the leaf area up to its parent zone the same way core's
+        // WorldObject::GetZoneId() does, so the stored zone id matches what a
+        // bot reports once it stands at the spawn. Without this, a node inside
+        // a sub-area would never satisfy the "arrived in zone" check in
+        // GatherResourcesController::HandleTravelling.
+        if (AreaTableEntry const* area = sAreaTableStore.LookupEntry(zoneId))
+            if (area->zone)
+                zoneId = area->zone;
         if (!zoneId)
             continue;
 

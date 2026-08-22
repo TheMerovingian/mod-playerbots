@@ -10,6 +10,7 @@
 
 #include "Creature.h"
 #include "CreatureData.h"
+#include "DBCStores.h"
 #include "DatabaseEnv.h"
 #include "Field.h"
 #include "ObjectMgr.h"
@@ -49,6 +50,13 @@ void PlayerbotSkinRepository::Repopulate()
 
         WorldPosition point(cd.mapid, cd.posX, cd.posY, cd.posZ);
         uint32 zoneId = point.getAreaId();
+        // Resolve the leaf area up to its parent zone the same way core's
+        // WorldObject::GetZoneId() does, so the stored zone id matches what a
+        // bot reports once it stands at the spawn. Without this, a monster in a
+        // sub-area would never satisfy the "arrived in zone" check.
+        if (AreaTableEntry const* area = sAreaTableStore.LookupEntry(zoneId))
+            if (area->zone)
+                zoneId = area->zone;
         if (!zoneId)
             continue;
 
