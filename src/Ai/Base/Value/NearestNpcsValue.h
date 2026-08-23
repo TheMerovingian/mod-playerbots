@@ -15,8 +15,13 @@ class PlayerbotAI;
 class NearestNpcsValue : public NearestUnitsValue
 {
 public:
+    // The NPC sight list drives non-combat interaction (vendors, quest-givers,
+    // auctions). Requiring LOS here makes NPCs behind counters / in buildings
+    // invisible to the bot even when standing next to them, stalling whole
+    // behaviours (BuyVendor, accept quest). Location proximity is enough for
+    // the sight list; individual actions re-verify reachability when acting.
     NearestNpcsValue(PlayerbotAI* botAI, float range = sPlayerbotAIConfig.sightDistance)
-        : NearestUnitsValue(botAI, "nearest npcs", range)
+        : NearestUnitsValue(botAI, "nearest npcs", range, /*ignoreLos=*/true)
     {
     }
 
