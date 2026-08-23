@@ -40,6 +40,7 @@
 #include "PositionValue.h"
 #include "RBAC.h"
 #include "RandomPlayerbotMgr.h"
+#include "FocusedPlayerbotMgr.h"
 #include "SayAction.h"
 #include "ScriptMgr.h"
 #include "ServerFacade.h"
@@ -4584,6 +4585,11 @@ bool PlayerbotAI::AllowActive(ActivityType activityType)
     if (!bot || !bot->GetSession() || !bot->IsInWorld() || bot->IsBeingTeleported() ||
         bot->GetSession()->isLogingOut() || bot->IsDuringRemoveFromWorld())
         return false;
+
+    // focused roster bots are always-on gathering/sales specialists and must
+    // never fall into the solo-bot activity rotation.
+    if (sFocusedPlayerbotMgr.IsFocusedBot(bot))
+        return true;
 
     // always allow packet handling (e.g. group invites, trade, loot, friend requests etc)
     if (activityType == PACKET_ACTIVITY)

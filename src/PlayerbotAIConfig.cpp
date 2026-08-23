@@ -7,6 +7,7 @@
 #include "PlayerbotAIConfig.h"
 #include "BisListMgr.h"
 #include "Config.h"
+#include "FocusedPlayerbotMgr.h"
 #include "NewRpgInfo.h"
 #include "PlayerbotDungeonRepository.h"
 #include "PlayerbotFactory.h"
@@ -314,6 +315,19 @@ bool PlayerbotAIConfig::Initialize()
     maxRandomBotsPriceChangeInterval =
         sConfigMgr->GetOption<int32>("AiPlayerbot.MaxRandomBotsPriceChangeInterval", 48 * HOUR);
     randomBotJoinLfg = sConfigMgr->GetOption<bool>("AiPlayerbot.RandomBotJoinLfg", true);
+
+    // Focused bot pool
+    focusedBotEnabled = sConfigMgr->GetOption<bool>("AiPlayerbot.FocusedBot.Enabled", true);
+    focusedBotAccountPrefix = sConfigMgr->GetOption<std::string>("AiPlayerbot.FocusedBot.AccountPrefix", "FRC");
+    focusedBotBotsPerFaction = sConfigMgr->GetOption<uint32>("AiPlayerbot.FocusedBot.BotsPerFaction", 10);
+    minFocusedBots = sConfigMgr->GetOption<uint32>("AiPlayerbot.FocusedBot.MinRandomBots", 1);
+    maxFocusedBots = sConfigMgr->GetOption<uint32>("AiPlayerbot.FocusedBot.MaxRandomBots", 20);
+    focusedBotsPerInterval = sConfigMgr->GetOption<uint32>("AiPlayerbot.FocusedBot.RandomBotsPerInterval", 4);
+    focusedBotMinLevel = sConfigMgr->GetOption<uint32>("AiPlayerbot.FocusedBot.MinLevel", 80);
+    focusedBotMaxLevel = sConfigMgr->GetOption<uint32>("AiPlayerbot.FocusedBot.MaxLevel", 80);
+    focusedBotBagItemId = sConfigMgr->GetOption<uint32>("AiPlayerbot.FocusedBot.BagItemId", 41599);
+    focusedBotSellThresholdStacks = sConfigMgr->GetOption<uint32>("AiPlayerbot.FocusedBot.SellThresholdStacks", 20);
+    focusedBotProductionEnabled = sConfigMgr->GetOption<bool>("AiPlayerbot.FocusedBot.ProductionEnabled", 1);
 
     restrictHealerDPS = sConfigMgr->GetOption<bool>("AiPlayerbot.HealerDPSMapRestriction", false);
     LoadList<std::vector<uint32>>(
@@ -809,6 +823,7 @@ bool PlayerbotAIConfig::Initialize()
     if (sPlayerbotAIConfig.enabled)
     {
         sRandomPlayerbotMgr.Init();
+        sFocusedPlayerbotMgr.Initialize();
     }
 
     PlayerbotGuildMgr::instance().Init();

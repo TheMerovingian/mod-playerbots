@@ -27,6 +27,7 @@
 #include "Playerbots.h"
 #include "RandomPlayerbotMgr.h"
 #include "SharedDefines.h"
+#include "FocusedPlayerbotMgr.h"
 #include "WorldSession.h"
 #include "WorldSessionMgr.h"
 #include <algorithm>
@@ -228,7 +229,14 @@ void PlayerbotHolder::HandlePlayerBotLoginCallback(PlayerbotLoginQueryHolder con
                   masterAccountId);
     }
 
-    sRandomPlayerbotMgr.OnPlayerLogin(bot);
+    // Focused bots (own account pool) are routed to their own manager so the
+    // randombot login-once side effects (grouping up, real-player census
+    // tracking, PvP flag) do not apply to them.
+    if (masterAccountId == 0 && sFocusedPlayerbotMgr.IsFocusedBot(bot))
+        sFocusedPlayerbotMgr.OnPlayerLogin(bot);
+    else
+        sRandomPlayerbotMgr.OnPlayerLogin(bot);
+
     auto op = std::make_unique<OnBotLoginOperation>(bot->GetGUID(), masterAccountId);
     PlayerbotWorldThreadProcessor::instance().QueueOperation(std::move(op));
 
@@ -667,6 +675,11 @@ void PlayerbotHolder::OnBotLogin(Player* const bot)
                 new_channel->JoinChannel(bot, "");
         }
     }
+
+    // Focused bots replace the just-reset default strategy stack with their
+    // dedicated gathering + auction-sales set.
+    if (sFocusedPlayerbotMgr.IsFocusedBot(bot))
+        sFocusedPlayerbotMgr.ApplyFocusedStrategies(bot);
 }
 
 std::string const PlayerbotHolder::ProcessBotCommand(std::string const cmd, ObjectGuid guid, ObjectGuid masterguid,

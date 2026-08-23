@@ -45,6 +45,7 @@ public:
     };
 
     static constexpr NameRaceAndGender CombineRaceAndGender(uint8 race, uint8 gender);
+    static bool IsValidRaceClassCombination(uint8 race, uint8 class_, uint32 expansion);
 
     RandomPlayerbotFactory() {};
     virtual ~RandomPlayerbotFactory() {}
@@ -57,7 +58,6 @@ public:
     static uint32 CalculateAvailableCharsPerAccount();
 
 private:
-    static bool IsValidRaceClassCombination(uint8 race, uint8 class_, uint32 expansion);
     std::string const CreateRandomBotName(NameRaceAndGender raceAndGender);
     static std::string const CreateRandomArenaTeamName();
 };

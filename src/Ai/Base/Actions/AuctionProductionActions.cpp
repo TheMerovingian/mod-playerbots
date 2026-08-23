@@ -19,6 +19,7 @@
 #include "ChatHelper.h"
 #include "Creature.h"
 #include "Event.h"
+#include "FocusedPlayerbotMgr.h"
 #include "GameObject.h"
 #include "GatherResourcesSessionValue.h"
 #include "Item.h"
@@ -470,13 +471,16 @@ bool AuctionProductionCatalog::Resolve(Player* bot, uint32 itemId, std::vector<A
 bool AuctionProductionUpdateAction::isUseful()
 {
     return sPlayerbotAIConfig.auctionEnabled && sPlayerbotAIConfig.auctionProductionEnabled &&
-           sRandomPlayerbotMgr.IsRandomBot(bot) && !bot->IsInCombat();
+           (sRandomPlayerbotMgr.IsRandomBot(bot) ||
+            (sPlayerbotAIConfig.focusedBotProductionEnabled && sFocusedPlayerbotMgr.IsFocusedBot(bot))) &&
+           !bot->IsInCombat();
 }
 
 bool AuctionProductionUpdateAction::Execute(Event /*event*/)
 {
     if (!sPlayerbotAIConfig.auctionEnabled || !sPlayerbotAIConfig.auctionProductionEnabled ||
-        !sRandomPlayerbotMgr.IsRandomBot(bot))
+        (!sRandomPlayerbotMgr.IsRandomBot(bot) &&
+         !(sPlayerbotAIConfig.focusedBotProductionEnabled && sFocusedPlayerbotMgr.IsFocusedBot(bot))))
         return false;
 
     if (bot->IsInCombat() || bot->GetMap()->Instanceable() || bot->InBattleground())

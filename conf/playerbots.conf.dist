@@ -112,6 +112,62 @@ AiPlayerbot.RandomBotAccountPrefix = "rndbot"
 # like to recreate randombots, set the number back to 0 and rerun the Worldserver.
 AiPlayerbot.DeleteRandomBotAccounts = 0
 
+# -----------------------------------------------------------------------------------
+# Focused bots
+#
+# A dedicated pool of always-on "focused" bots that live completely outside the
+# randombot randomize/teleport/wipe loop. Roster characters are created once on
+# their own account prefix (idempotent on restart) and are rolled to
+# FocusedBot.MaxLevel on first login with the gathering professions forced to
+# max (mining + herbalism) and large bags equipped. Their non-combat strategy
+# stack only contains gathering + auction-sales behaviours, and they sell when
+# the configured stack threshold is reached so they don't run back and forth
+# to the auctioneer every few minutes. Their inventory is NEVER wiped.
+# Default: 1 (enabled)
+AiPlayerbot.FocusedBot.Enabled = 1
+
+# Prefix for focused bot accounts. Do not change this prefix while there are
+# existing focused bot accounts. Default: "FRC"
+AiPlayerbot.FocusedBot.AccountPrefix = "FRC"
+
+# Number of focused bots per faction (alliance + horde). 10 creates one bot per
+# class per faction.
+# Default: 10
+AiPlayerbot.FocusedBot.BotsPerFaction = 10
+
+# Min/Max number of focused bots to keep online (rndbot-style caps).
+# Default: 1 / 20 (20 == BotsPerFaction * 2)
+AiPlayerbot.FocusedBot.MinRandomBots = 1
+AiPlayerbot.FocusedBot.MaxRandomBots = 20
+
+# How many focused bots may log in per keep-alive sweep (rndbot-style).
+# Default: 4
+AiPlayerbot.FocusedBot.RandomBotsPerInterval = 4
+
+# Level range applied to focused bots. Bots are created at level 1 and rolled
+# to FocusedBot.MaxLevel on first login.
+# Default: 80 / 80
+AiPlayerbot.FocusedBot.MinLevel = 80
+AiPlayerbot.FocusedBot.MaxLevel = 80
+
+# Item id of the bag equipped in every bag slot. 41599 = Frostweave Bag (20 slots),
+# the largest non-profession bag in WotLK.
+# Default: 41599
+AiPlayerbot.FocusedBot.BagItemId = 41599
+
+# Minimum number of full stacks of trade materials (ore + herbs + cloth ...
+# combined) a focused bot must have before it posts anything on the auction
+# house, so it gathers without running back and forth. E.g. 20 = 8 stacks
+# of ore plus 12 stacks of herbs is enough to sell.
+# Default: 20
+AiPlayerbot.FocusedBot.SellThresholdStacks = 20
+
+# Also enable the auction-production post-sale behaviour for focused bots.
+# Purely-gathering bots (mining + herbalism) have no crafting skill, so this
+# is a no-op for them.
+# Default: 1
+AiPlayerbot.FocusedBot.ProductionEnabled = 1
+
 # Disable randombots when no real players are logged in
 # Default: 0 (randombots will login when server starts)
 # If enabled, randombots will only log in 30 seconds (default) after a real player logs in, and will

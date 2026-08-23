@@ -11,6 +11,7 @@
 #include "ArenaTeamMgr.h"
 #include "DBCStores.h"
 #include "DBCStructure.h"
+#include "FocusedPlayerbotMgr.h"
 #include "GuildMgr.h"
 #include "InventoryAction.h"
 #include "Item.h"
@@ -2622,7 +2623,12 @@ void PlayerbotFactory::InitBags(bool destroyOld)
 {
     for (uint8 slot = INVENTORY_SLOT_BAG_START; slot < INVENTORY_SLOT_BAG_END; ++slot)
     {
+        // Focused bots (gathering/sales specialists) get the configured large
+        // bag in every slot so they can accumulate materials between sales.
         uint32 newItemId = 51809;
+        if (sFocusedPlayerbotMgr.IsFocusedBot(bot) && sPlayerbotAIConfig.focusedBotBagItemId)
+            newItemId = sPlayerbotAIConfig.focusedBotBagItemId;
+
         Item* old_bag = bot->GetItemByPos(INVENTORY_SLOT_BAG_0, slot);
         if (old_bag && old_bag->GetTemplate()->ItemId == newItemId)
             continue;

@@ -173,6 +173,17 @@ public:
     uint32 disabledWithoutRealPlayerLoginDelay, disabledWithoutRealPlayerLogoutDelay;
     bool randomBotJoinLfg;
 
+    // Focused bots (dedicated always-on gathering/sales bot pool)
+    bool focusedBotEnabled;
+    std::string focusedBotAccountPrefix;
+    uint32 focusedBotBotsPerFaction;
+    uint32 minFocusedBots, maxFocusedBots;
+    uint32 focusedBotsPerInterval;
+    uint32 focusedBotMinLevel, focusedBotMaxLevel;
+    uint32 focusedBotBagItemId;
+    uint32 focusedBotSellThresholdStacks;
+    bool focusedBotProductionEnabled;
+
     // Professions
     bool enableFishingWithMaster;
     uint32 classMatchingProfessionChance;

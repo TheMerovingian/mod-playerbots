@@ -19,6 +19,7 @@
 #include "PlayerbotRepository.h"
 #include "Playerbots.h"
 #include "RandomPlayerbotMgr.h"
+#include "FocusedPlayerbotMgr.h"
 #include "UseMeetingStoneAction.h"
 #include "WorldSession.h"
 #include "WorldSessionMgr.h"
@@ -503,6 +504,11 @@ public:
             Player* masterPlayer = masterSession ? masterSession->GetPlayer() : nullptr;
             if (masterPlayer)
                 holder = PlayerbotsMgr::instance().GetPlayerbotMgr(masterPlayer);
+        }
+        else if (FocusedPlayerbotMgr::instance().IsFocusedBot(m_botGuid.GetCounter()))
+        {
+            // Focused roster bots are owned by their own manager.
+            holder = &FocusedPlayerbotMgr::instance();
         }
 
         if (!holder)

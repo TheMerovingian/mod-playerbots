@@ -15,6 +15,7 @@
 #include "AuctionProductionValue.h"
 #include "DatabaseEnv.h"
 #include "Event.h"
+#include "FocusedPlayerbotMgr.h"
 #include "Item.h"
 #include "ItemVisitors.h"
 #include "ObjectMgr.h"
@@ -43,6 +44,33 @@ public:
 
     std::unordered_map<uint32, std::vector<Item*>> groups;
 };
+
+namespace
+{
+// Number of full stacks of trade materials (ores / herbs / cloth / leather /
+// gems) the bot currently carries across all bags. Used to defer auction post
+// for focused bots until FocusedBot.SellThresholdStacks is reached, so they
+// gather a large bundle before heading off to sell instead of trickling
+// listings (and running back and forth) every few minutes.
+uint32 CountTradeMaterialStacks(std::unordered_map<uint32, std::vector<Item*>> const& groups)
+{
+    uint32 fullStacks = 0;
+    for (auto const& [entry, items] : groups)
+    {
+        Item* first = items.front();
+        if (AuctionSellAction::Classify(first) != AuctionSellAction::ListingKind::TradeMaterial)
+            continue;
+
+        uint32 total = 0;
+        for (Item* item : items)
+            total += item->GetCount();
+
+        uint32 const maxStack = std::max<uint32>(first->GetTemplate()->GetMaxStackSize(), 1);
+        fullStacks += maxStack ? total / maxStack : 0;
+    }
+    return fullStacks;
+}
+}  // namespace
 
 AuctionSellAction::ListingKind AuctionSellAction::Classify(Item* item)
 {
@@ -108,16 +136,25 @@ bool AuctionSellAction::CanDisenchant(PlayerbotAI* botAI, Item* item)
 
 bool AuctionSellAction::isUseful()
 {
-    return sPlayerbotAIConfig.auctionEnabled && sRandomPlayerbotMgr.IsRandomBot(bot);
+    return sPlayerbotAIConfig.auctionEnabled &&
+           (sRandomPlayerbotMgr.IsRandomBot(bot) || sFocusedPlayerbotMgr.IsFocusedBot(bot));
 }
 
 bool AuctionSellAction::Execute(Event /*event*/)
 {
-    if (!sPlayerbotAIConfig.auctionEnabled || !sRandomPlayerbotMgr.IsRandomBot(bot))
+    if (!sPlayerbotAIConfig.auctionEnabled ||
+        (!sRandomPlayerbotMgr.IsRandomBot(bot) && !sFocusedPlayerbotMgr.IsFocusedBot(bot)))
         return false;
 
     AuctionGatherVisitor visitor;
     IterateItems(&visitor, ITERATE_ITEMS_IN_BAGS);
+
+    // Focused bots defer listings until they have accumulated at least
+    // FocusedBot.SellThresholdStacks full stacks of trade materials, so they
+    // gather a large bundle before selling instead of running back and forth.
+    if (sFocusedPlayerbotMgr.IsFocusedBot(bot) && sPlayerbotAIConfig.focusedBotSellThresholdStacks > 0 &&
+        CountTradeMaterialStacks(visitor.groups) < sPlayerbotAIConfig.focusedBotSellThresholdStacks)
+        return false;
 
     // The "auction production" behaviour reserves raw trade materials and
     // intermediates for an in-flight order; those entries are not listed raw.

@@ -23,6 +23,7 @@
 #include "PlayerbotSkinRepository.h"
 #include "PlayerbotSpellRepository.h"
 #include "PlayerbotWorldThreadProcessor.h"
+#include "FocusedPlayerbotMgr.h"
 #include "RandomPlayerbotMgr.h"
 #include "ScriptMgr.h"
 #include "cmath"
@@ -396,6 +397,7 @@ public:
     {
         PlayerbotWorldThreadProcessor::instance().Update(diff);
         sRandomPlayerbotMgr.UpdateAI(diff);  // World thread only
+        sFocusedPlayerbotMgr.UpdateAI(diff);
     }
 };
 
@@ -484,12 +486,16 @@ public:
         }
 
         sRandomPlayerbotMgr.OnPlayerLogout(player);
+
+        if (sFocusedPlayerbotMgr.IsFocusedBot(player))
+            sFocusedPlayerbotMgr.OnPlayerLogout(player);
     }
 
     void OnPlayerbotLogoutBots() override
     {
         LOG_INFO("playerbots", "Logging out all bots...");
         sRandomPlayerbotMgr.LogoutAllBots();
+        sFocusedPlayerbotMgr.LogoutAllBots();
     }
 };
 
