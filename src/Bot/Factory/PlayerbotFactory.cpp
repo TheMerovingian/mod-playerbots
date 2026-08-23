@@ -36,6 +36,8 @@
 #include "StatsWeightCalculator.h"
 #include "World.h"
 #include <array>
+#include <unordered_map>
+#include <unordered_set>
 #include <utility>
 
 const uint64 diveMask = (1LL << 7) | (1LL << 44) | (1LL << 37) | (1LL << 38) | (1LL << 26) | (1LL << 30) | (1LL << 27) |
@@ -107,6 +109,88 @@ constexpr uint32 SPELL_IMPROVED_HOWL_OF_TERROR = 30057;
 constexpr uint32 SPELL_NEMESIS = 63123;
 constexpr uint32 SPELL_INTENSITY = 18136;
 constexpr uint32 SPELL_NETHER_PROTECTION = 30302;
+
+// A recipe spell candidates for a trade-skill profession. Only spells that
+// actually produce a consumable (ITEM_CLASS_CONSUMABLE) item are eligible, so
+// crafted equipment and jewellery (gems / rings / necks) are excluded.
+struct CraftRecipeCandidate
+{
+    uint32 spellId;
+    bool   wotlk;     // recipe falls in the WotLK (grand-master) skill band
+};
+
+// Consumable-crafting recipes per primary profession skill line. Built lazily
+// once from DBC + item data (all load-time static). Keying by `sSkillLineStore`
+// category restricts to primary professions; gathering skills add no item
+// -producing spells so they contribute nothing.
+std::unordered_map<uint16, std::vector<CraftRecipeCandidate>>& ConsumableCraftRecipes()
+{
+    // WotLK added the Grand Master tier (>375 skill; vanilla reaches 300, TBC
+    // reaches the Master 375 cap). A recipe whose non-trivial band extends above
+    // 375 is therefore uniquely WotLK content -- it drives the 10 WotLK / 10
+    // other split. The item_template.RequiredSkillRank column cannot be used for
+    // this (realms store it as 0 for most crafted consumables), so the band is
+    // read from the recipe's own SkillLineAbility trivial band.
+    static constexpr uint32 WOTLK_MIN_SKILL_RANK = 375;
+
+    static std::unordered_map<uint16, std::vector<CraftRecipeCandidate>> pool = []()
+    {
+        std::unordered_map<uint16, std::vector<CraftRecipeCandidate>> result;
+        for (uint32 i = 0; i < sSkillLineAbilityStore.GetNumRows(); ++i)
+        {
+            SkillLineAbilityEntry const* skillLine = sSkillLineAbilityStore.LookupEntry(i);
+            if (!skillLine || !skillLine->SkillLine || !skillLine->Spell)
+                continue;
+
+            SkillLineEntry const* line = sSkillLineStore.LookupEntry(skillLine->SkillLine);
+            if (!line || line->categoryId != SKILL_CATEGORY_PROFESSION)
+                continue;
+
+            SpellInfo const* spellInfo = sSpellMgr->GetSpellInfo(skillLine->Spell);
+            if (!spellInfo)
+                continue;
+
+            for (uint8 e = 0; e < MAX_SPELL_EFFECTS; ++e)
+            {
+                if (spellInfo->Effects[e].Effect != SPELL_EFFECT_CREATE_ITEM &&
+                    spellInfo->Effects[e].Effect != SPELL_EFFECT_ENCHANT_ITEM)
+                    continue;
+
+                uint32 const itemId = spellInfo->Effects[e].ItemType;
+                if (!itemId)
+                    continue;
+
+                // Consumables only: excludes equipment and jewellery (armor/gems).
+                ItemTemplate const* proto = sObjectMgr->GetItemTemplate(itemId);
+                if (!proto || proto->Class != ITEM_CLASS_CONSUMABLE)
+                    continue;
+
+                result[skillLine->SkillLine].push_back(
+                    {skillLine->Spell,
+                     skillLine->TrivialSkillLineRankHigh > WOTLK_MIN_SKILL_RANK});
+                break;
+            }
+        }
+        return result;
+    }();
+    return pool;
+}
+
+// true when `spellId` is a consumable-crafting recipe handled by the curated
+// allocation (InitCraftingRecipes). Used to stop the trainer teaching every
+// trade-skill recipe so a bot keeps exactly its randomly allocated set.
+bool IsConsumableCraftRecipe(uint32 spellId)
+{
+    static std::unordered_set<uint32> const craftIds = []()
+    {
+        std::unordered_set<uint32> ids;
+        for (auto const& [skillLine, recipes] : ConsumableCraftRecipes())
+            for (CraftRecipeCandidate const& recipe : recipes)
+                ids.insert(recipe.spellId);
+        return ids;
+    }();
+    return craftIds.count(spellId) != 0;
+}
 }
 
 bool PlayerbotFactory::IsPrimaryTradeSkill(uint16 skillId)
@@ -2880,6 +2964,50 @@ void PlayerbotFactory::InitTradeSkills()
     InitTradeSpecializations();
 }
 
+void PlayerbotFactory::InitCraftingRecipes()
+{
+    // Give each bot a random, bounded set of consumable-crafting recipes per
+    // assigned profession: 10 from the WotLK (grand-master) tier and 10 from
+    // the rest. Randomising per-bot keeps the craftable pools distinct across
+    // alchemists (and other crafters) so they are not pinned to one product.
+    constexpr uint32 kRecipesPerBand = 10;
+
+    auto const& pool = ConsumableCraftRecipes();
+    for (auto const& [skillId, recipes] : pool)
+    {
+        if (!bot->HasSkill(skillId))
+            continue;
+
+        std::vector<CraftRecipeCandidate const*> wotlk;
+        std::vector<CraftRecipeCandidate const*> other;
+        for (CraftRecipeCandidate const& recipe : recipes)
+            (recipe.wotlk ? wotlk : other).push_back(&recipe);
+
+        auto sample = [](std::vector<CraftRecipeCandidate const*>& src, uint32 count)
+        {
+            std::vector<CraftRecipeCandidate const*> out;
+            for (uint32 pick = 0; pick < src.size() && out.size() < count; ++pick)
+            {
+                uint32 const idx = urand(pick, uint32(src.size()) - 1);
+                std::swap(src[pick], src[idx]);
+                out.push_back(src[pick]);
+            }
+            return out;
+        };
+
+        std::vector<CraftRecipeCandidate const*> selected = sample(wotlk, kRecipesPerBand);
+        std::vector<CraftRecipeCandidate const*> otherPicked = sample(other, kRecipesPerBand);
+        selected.insert(selected.end(), otherPicked.begin(), otherPicked.end());
+
+        // Craftability is enforced downstream (AuctionProduction FindCraftSpell
+        // and the craft cast both skill-gate the recipe), so the full bounded
+        // set may be allocated regardless of the bot's current skill value.
+        for (CraftRecipeCandidate const* recipe : selected)
+            if (!bot->HasSpell(recipe->spellId))
+                bot->learnSpell(recipe->spellId, false);
+    }
+}
+
 void PlayerbotFactory::InitTradeSpecializations()
 {
     InitAlchemySpecialization();
@@ -3199,6 +3327,7 @@ void PlayerbotFactory::InitSkills()
     }
 
     InitTradeSkills();
+    InitCraftingRecipes();
     InitInventorySkill();
 
     // switch (bot->getClass())
@@ -3280,7 +3409,15 @@ void PlayerbotFactory::InitAvailableSpells()
             if (trainerSpell->IsCastable())
                 bot->CastSpell(bot, trainerSpell->SpellId, true);
             else
+            {
+                // Consumable-crafting recipes are allocated randomly per bot by
+                // InitCraftingRecipes; do not dump the entire trainer recipe
+                // book on top, or every bot would end up mastering the same set.
+                if (IsConsumableCraftRecipe(trainerSpell->SpellId))
+                    continue;
+
                 bot->learnSpell(trainerSpell->SpellId, false);
+            }
         }
     }
 }
