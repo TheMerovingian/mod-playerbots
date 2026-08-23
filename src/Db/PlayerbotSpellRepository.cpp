@@ -22,8 +22,12 @@ void PlayerbotSpellRepository::Initialize()
             skillSpells[skillLine->Spell] = skillLine;
     }
 
-        // Fill the vendorItems cache once from the world database.
-        QueryResult results = WorldDatabase.Query("SELECT item FROM npc_vendor WHERE maxcount = 0");
+        // Fill the vendorItems cache once from the world database. Restrict to
+        // coin-buyable listings (ExtendedCost = 0): token-only vendors (honour,
+        // arena, emblem/orb turn-ins) cannot be bought with the bot's gold and
+        // must not be treated as vendor supplies, or the auction production bot
+        // would dead-end on them (e.g. Frost Lotus, Arctic Fur).
+        QueryResult results = WorldDatabase.Query("SELECT item FROM npc_vendor WHERE maxcount = 0 AND ExtendedCost = 0");
         if (results)
         {
             do

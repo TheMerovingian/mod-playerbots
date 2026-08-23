@@ -107,7 +107,7 @@ private:
     bool IsGatherableLeaf(uint32 itemId, uint32& skillId, uint32& tier) const;
 
     bool EnsureAtVendor(AuctionProductionSession& session);
-    Creature* FindVendor();
+    Creature* FindVendor(std::map<uint32, uint32> const& vendorNeeds);
     void BuyFromVendor(AuctionProductionSession& session);
     void RequestGathering(AuctionProductionSession& session);
     void HandleGatherMaterials(AuctionProductionSession& session);

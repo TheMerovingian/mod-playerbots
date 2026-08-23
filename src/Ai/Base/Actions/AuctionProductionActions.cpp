@@ -220,15 +220,18 @@ std::vector<AuctionProductionCatalog::Product> AuctionProductionCatalog::Inscrip
     return products;
 }
 
-// Each product item is produced by a single known spell (conflated only when a
-// multi-rank recipe shares the same item id across ranks; the spell map fold
-// keeps the last match).
+// Each product item is produced by a single known spell. Multi-rank recipes that
+// share the same item id across ranks are conflated by picking the best rank the
+// bot can actually cast: a spell is only usable when the bot's skill on that
+// spell's skill line meets the recipe's required rank (otherwise the craft would
+// hard-fail with SPELL_FAILED_SKILL and abort the order mid-session).
 uint32 AuctionProductionCatalog::FindCraftSpell(Player* bot, uint32 itemId)
 {
     if (!bot || !itemId)
         return 0;
 
     uint32 found = 0;
+    uint32 bestRank = 0;
     for (PlayerSpellMap::iterator itr = bot->GetSpellMap().begin(); itr != bot->GetSpellMap().end(); ++itr)
     {
         uint32 const spellId = itr->first;
@@ -239,6 +242,7 @@ uint32 AuctionProductionCatalog::FindCraftSpell(Player* bot, uint32 itemId)
         if (!spellInfo)
             continue;
 
+        bool creates = false;
         for (uint8 i = 0; i < 3; ++i)
         {
             if (spellInfo->Effects[i].ItemType != itemId)
@@ -246,7 +250,32 @@ uint32 AuctionProductionCatalog::FindCraftSpell(Player* bot, uint32 itemId)
 
             if (spellInfo->Effects[i].Effect == SPELL_EFFECT_CREATE_ITEM ||
                 spellInfo->Effects[i].Effect == SPELL_EFFECT_ENCHANT_ITEM)
-                found = spellId;
+            {
+                creates = true;
+                break;
+            }
+        }
+
+        if (!creates)
+            continue;
+
+        // Skill gate: recipes below the bot's skill line rank are not castable.
+        // Spells without a skill-line entry (no skill requirement) are kept.
+        SkillLineAbilityEntry const* skillLine = SkillSpells()[spellId];
+        uint32 required = 0;
+        if (skillLine && skillLine->SkillLine)
+        {
+            required = skillLine->MinSkillLineRank;
+            if (required > bot->GetSkillValue(skillLine->SkillLine))
+                continue;
+        }
+
+        // Prefer the recipe with the highest required rank the bot can cast
+        // (the best / least wasteful rank of a shared item across ranks).
+        if (required >= bestRank)
+        {
+            bestRank = required;
+            found = spellId;
         }
     }
 
@@ -741,8 +770,20 @@ bool AuctionProductionUpdateAction::PlanOrder(AuctionProductionSession& session,
         if (leafProto && static_cast<uint32>(leafProto->GetMaxStackSize()) > 1 &&
             !RandomItemMgr::IsUsedBySkill(leafProto, SKILL_ENCHANTING))
         {
-            uint32 const keep = sPlayerbotAIConfig.auctionKeepStacks * leafProto->GetMaxStackSize();
-            owned = owned > keep ? owned - keep : 0;
+            uint32 skillId = 0;
+            uint32 tier = 0;
+            bool const gathered = IsGatherableLeaf(leaf.first, skillId, tier);
+
+            // The keep-stack floor protects the general auction-sell stock from
+            // being consumed by an order. Materials the bot will collect itself
+            // are exempt: the order is the only consumer, and flooring them
+            // below the keep count would make the shortfall never clear (the
+            // gather handoff would loop forever re-requesting the same herb).
+            if (!gathered)
+            {
+                uint32 const keep = sPlayerbotAIConfig.auctionKeepStacks * leafProto->GetMaxStackSize();
+                owned = owned > keep ? owned - keep : 0;
+            }
         }
 
         if (leaf.second <= owned)
@@ -1009,7 +1050,7 @@ bool AuctionProductionUpdateAction::IsGatherableLeaf(uint32 itemId, uint32& skil
     return true;
 }
 
-Creature* AuctionProductionUpdateAction::FindVendor()
+Creature* AuctionProductionUpdateAction::FindVendor(std::map<uint32, uint32> const& vendorNeeds)
 {
     GuidVector npcs = AI_VALUE(GuidVector, "nearest npcs");
     for (ObjectGuid const guid : npcs)
@@ -1018,8 +1059,22 @@ Creature* AuctionProductionUpdateAction::FindVendor()
         if (!creature || !creature->IsAlive())
             continue;
 
-        if (creature->HasNpcFlag(UNIT_NPC_FLAG_VENDOR))
+        if (!creature->HasNpcFlag(UNIT_NPC_FLAG_VENDOR))
+            continue;
+
+        if (vendorNeeds.empty())
             return creature;
+
+        // Only count a vendor that actually stocks one of the required parts:
+        // BuyFromVendor can never complete against a vendor selling something
+        // else, and pinning on that vendor would burn the travel budget.
+        VendorItemData const* vItems = creature->GetVendorItems();
+        if (!vItems)
+            continue;
+        for (auto const& need : vendorNeeds)
+            for (auto const& vitem : vItems->m_items)
+                if (vitem && vitem->item == need.first)
+                    return creature;
     }
 
     return nullptr;
@@ -1027,85 +1082,65 @@ Creature* AuctionProductionUpdateAction::FindVendor()
 
 bool AuctionProductionUpdateAction::EnsureAtVendor(AuctionProductionSession& session)
 {
-    // A visible vendor only counts if it can actually sell the needed parts:
-    // walking to the nearest vendor that doesn't stock the reagent would leave
-    // BuyFromVendor unable to complete. With no specific part, any vendor is
-    // fine.
-    Creature* vendor = FindVendor();
-    bool vendorServesNeeds = true;
-    if (vendor && !session.vendorNeeds.empty())
-    {
-        VendorItemData const* vItems = vendor->GetVendorItems();
-        vendorServesNeeds = false;
-        if (vItems)
-            for (auto const& need : session.vendorNeeds)
-                for (auto const& vitem : vItems->m_items)
-                    if (vitem && vitem->item == need.first)
-                    {
-                        vendorServesNeeds = true;
-                        break;
-                    }
-    }
-
-    if (vendor && vendorServesNeeds && bot->IsWithinDistInMap(vendor, INTERACTION_DISTANCE))
+    Creature* vendor = FindVendor(session.vendorNeeds);
+    if (vendor && bot->IsWithinDistInMap(vendor, INTERACTION_DISTANCE))
         return true;
 
-    if (!vendor || (!vendorServesNeeds && !bot->IsWithinDistInMap(vendor, INTERACTION_DISTANCE)))
+    if (vendor)
     {
-        // Not in sight (or the vendor in sight does not stock the part): travel
-        // to the nearest vendor that actually sells one of the required vendor
-        // parts. TravelMgr's rpg destination set is not populated on this
-        // branch, so resolve from spawn data directly. With no specific part
-        // required any vendor qualifies.
-        WorldPosition botPos(bot);
-        CreatureData const* best = nullptr;
-        float bestDist = std::numeric_limits<float>::max();
-
-        for (auto const& [spawnGuid, data] : sObjectMgr->GetAllCreatureData())
-        {
-            CreatureTemplate const* cInfo = sObjectMgr->GetCreatureTemplate(data.id);
-            if (!cInfo || !(cInfo->npcflag & UNIT_NPC_FLAG_VENDOR))
-                continue;
-
-            if (!session.vendorNeeds.empty())
-            {
-                VendorItemData const* vItems = sObjectMgr->GetNpcVendorItemList(data.id);
-                bool sellsPart = false;
-                if (vItems)
-                {
-                    for (auto const& need : session.vendorNeeds)
-                        for (auto const& vitem : vItems->m_items)
-                            if (vitem && vitem->item == need.first)
-                            {
-                                sellsPart = true;
-                                break;
-                            }
-                }
-                if (!sellsPart)
-                    continue;
-            }
-
-            WorldPosition pos(data.mapid, data.posX, data.posY, data.posZ, 0.0f);
-            float const dist = pos.distance(&botPos);
-            if (dist < bestDist)
-            {
-                bestDist = dist;
-                best = &data;
-            }
-        }
-
-        if (!best)
-        {
-            LOG_WARN("playerbots.auction", "AuctionProduction {} found no vendor to travel to",
-                     bot->GetGUID().ToString());
-            return false;
-        }
-
-        MoveTo(best->mapid, best->posX, best->posY, best->posZ, false, false, false, false);
+        MoveTo(vendor, INTERACTION_DISTANCE - 1.0f);
         return false;
     }
 
-    MoveTo(vendor, INTERACTION_DISTANCE - 1.0f);
+    // Not in sight: travel to the nearest vendor that actually sells one of
+    // the required vendor parts. TravelMgr's rpg destination set is not
+    // populated on this branch, so resolve from spawn data directly. With no
+    // specific part required any vendor qualifies.
+    WorldPosition botPos(bot);
+    CreatureData const* best = nullptr;
+    float bestDist = std::numeric_limits<float>::max();
+
+    for (auto const& [spawnGuid, data] : sObjectMgr->GetAllCreatureData())
+    {
+        CreatureTemplate const* cInfo = sObjectMgr->GetCreatureTemplate(data.id);
+        if (!cInfo || !(cInfo->npcflag & UNIT_NPC_FLAG_VENDOR))
+            continue;
+
+        if (!session.vendorNeeds.empty())
+        {
+            VendorItemData const* vItems = sObjectMgr->GetNpcVendorItemList(data.id);
+            bool sellsPart = false;
+            if (vItems)
+            {
+                for (auto const& need : session.vendorNeeds)
+                    for (auto const& vitem : vItems->m_items)
+                        if (vitem && vitem->item == need.first)
+                        {
+                            sellsPart = true;
+                            break;
+                        }
+            }
+            if (!sellsPart)
+                continue;
+        }
+
+        WorldPosition pos(data.mapid, data.posX, data.posY, data.posZ, 0.0f);
+        float const dist = pos.distance(&botPos);
+        if (dist < bestDist)
+        {
+            bestDist = dist;
+            best = &data;
+        }
+    }
+
+    if (!best)
+    {
+        LOG_WARN("playerbots.auction", "AuctionProduction {} found no vendor to travel to",
+                 bot->GetGUID().ToString());
+        return false;
+    }
+
+    MoveTo(best->mapid, best->posX, best->posY, best->posZ, false, false, false, false);
     return false;
 }
 

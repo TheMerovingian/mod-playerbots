@@ -3220,11 +3220,13 @@ void PlayerbotFactory::SetRandomSkill(uint16 id)
 {
     uint32 maxValue = level * 5;
 
-    // do not let skill go beyond limit even if maxlevel > blizzlike
-    // if (level > 60)
-    // {
-    //     maxValue = (level + 10) * 5;
-    // }
+    // Primary trade skills reach a grand-master cap of 450 in WotLK. The
+    // vanilla-style level * 5 formula plateaus at 400 for a level 80 bot, which
+    // leaves the max-tier crafting recipes (and thus behaviours such as
+    // AuctionProduction's catalog) permanently unreachable. Scale professions
+    // with (level + 10) * 5, capped at the grand-master value.
+    if (IsPrimaryTradeSkill(id))
+        maxValue = std::min<uint32>(450, (level + 10) * 5);
 
     // uint32 value = urand(maxValue - level, maxValue);
     uint32 value = maxValue;
