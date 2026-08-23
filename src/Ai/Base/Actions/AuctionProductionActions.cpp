@@ -488,7 +488,7 @@ bool AuctionProductionUpdateAction::Execute(Event /*event*/)
             break;
         }
         case AuctionProductionSession::Phase::BuyVendor:
-            if (!EnsureAtVendor())
+            if (!EnsureAtVendor(session))
             {
                 // Walking to a vendor can take a while; give the bot a travel
                 // budget instead of counting per-tick retries.
@@ -972,16 +972,30 @@ bool AuctionProductionUpdateAction::IsGatherableLeaf(uint32 itemId, uint32& skil
     if (!proto)
         return false;
 
+    // Classify by item class/subclass - the gathering skill a leaf belongs to
+    // is determined by what it IS (herb / ore / leather-meat), not by the
+    // RequiredSkill column (which some realms repurpose, e.g. 773 Inscription
+    // for herbs). RandomItemMgr::IsUsedBySkill matches *crafted* items and is
+    // therefore not a suitable gathering test.
     uint32 skill = 0;
-    if (proto->RequiredSkill == SKILL_HERBALISM || proto->RequiredSkill == SKILL_MINING ||
-        proto->RequiredSkill == SKILL_SKINNING)
-        skill = proto->RequiredSkill;
-    else if (RandomItemMgr::IsUsedBySkill(proto, SKILL_HERBALISM))
-        skill = SKILL_HERBALISM;
-    else if (RandomItemMgr::IsUsedBySkill(proto, SKILL_MINING))
-        skill = SKILL_MINING;
-    else if (RandomItemMgr::IsUsedBySkill(proto, SKILL_SKINNING))
-        skill = SKILL_SKINNING;
+    if (proto->Class == ITEM_CLASS_TRADE_GOODS)
+    {
+        switch (proto->SubClass)
+        {
+            case ITEM_SUBCLASS_HERB:
+                skill = SKILL_HERBALISM;
+                break;
+            case ITEM_SUBCLASS_METAL_STONE:
+                skill = SKILL_MINING;
+                break;
+            case ITEM_SUBCLASS_LEATHER:
+            case ITEM_SUBCLASS_MEAT:
+                skill = SKILL_SKINNING;
+                break;
+            default:
+                break;
+        }
+    }
 
     if (!skill || !bot->HasSkill(skill))
         return false;
@@ -1011,33 +1025,72 @@ Creature* AuctionProductionUpdateAction::FindVendor()
     return nullptr;
 }
 
-bool AuctionProductionUpdateAction::EnsureAtVendor()
+bool AuctionProductionUpdateAction::EnsureAtVendor(AuctionProductionSession& session)
 {
+    // A visible vendor only counts if it can actually sell the needed parts:
+    // walking to the nearest vendor that doesn't stock the reagent would leave
+    // BuyFromVendor unable to complete. With no specific part, any vendor is
+    // fine.
     Creature* vendor = FindVendor();
-    if (vendor && bot->IsWithinDistInMap(vendor, INTERACTION_DISTANCE))
+    bool vendorServesNeeds = true;
+    if (vendor && !session.vendorNeeds.empty())
+    {
+        VendorItemData const* vItems = vendor->GetVendorItems();
+        vendorServesNeeds = false;
+        if (vItems)
+            for (auto const& need : session.vendorNeeds)
+                for (auto const& vitem : vItems->m_items)
+                    if (vitem && vitem->item == need.first)
+                    {
+                        vendorServesNeeds = true;
+                        break;
+                    }
+    }
+
+    if (vendor && vendorServesNeeds && bot->IsWithinDistInMap(vendor, INTERACTION_DISTANCE))
         return true;
 
-    if (!vendor)
+    if (!vendor || (!vendorServesNeeds && !bot->IsWithinDistInMap(vendor, INTERACTION_DISTANCE)))
     {
-        // Not in sight: travel to the nearest known vendor spawn.
+        // Not in sight (or the vendor in sight does not stock the part): travel
+        // to the nearest vendor that actually sells one of the required vendor
+        // parts. TravelMgr's rpg destination set is not populated on this
+        // branch, so resolve from spawn data directly. With no specific part
+        // required any vendor qualifies.
         WorldPosition botPos(bot);
-        TravelDestination* best = nullptr;
+        CreatureData const* best = nullptr;
         float bestDist = std::numeric_limits<float>::max();
 
-        for (TravelDestination* dest : TravelMgr::instance().getRpgTravelDestinations(bot, true, true))
+        for (auto const& [spawnGuid, data] : sObjectMgr->GetAllCreatureData())
         {
-            if (!dest->getEntry())
-                continue;
-
-            CreatureTemplate const* cInfo = sObjectMgr->GetCreatureTemplate(dest->getEntry());
+            CreatureTemplate const* cInfo = sObjectMgr->GetCreatureTemplate(data.id);
             if (!cInfo || !(cInfo->npcflag & UNIT_NPC_FLAG_VENDOR))
                 continue;
 
-            float const dist = dest->distanceTo(&botPos);
+            if (!session.vendorNeeds.empty())
+            {
+                VendorItemData const* vItems = sObjectMgr->GetNpcVendorItemList(data.id);
+                bool sellsPart = false;
+                if (vItems)
+                {
+                    for (auto const& need : session.vendorNeeds)
+                        for (auto const& vitem : vItems->m_items)
+                            if (vitem && vitem->item == need.first)
+                            {
+                                sellsPart = true;
+                                break;
+                            }
+                }
+                if (!sellsPart)
+                    continue;
+            }
+
+            WorldPosition pos(data.mapid, data.posX, data.posY, data.posZ, 0.0f);
+            float const dist = pos.distance(&botPos);
             if (dist < bestDist)
             {
                 bestDist = dist;
-                best = dest;
+                best = &data;
             }
         }
 
@@ -1048,13 +1101,7 @@ bool AuctionProductionUpdateAction::EnsureAtVendor()
             return false;
         }
 
-        if (std::vector<WorldPosition*> points = best->nextPoint(&botPos, true); !points.empty())
-        {
-            MoveTo(points.front()->GetMapId(), points.front()->GetPositionX(), points.front()->GetPositionY(),
-                   points.front()->GetPositionZ());
-            return false;
-        }
-
+        MoveTo(best->mapid, best->posX, best->posY, best->posZ, false, false, false, false);
         return false;
     }
 
@@ -1150,10 +1197,10 @@ void AuctionProductionUpdateAction::RequestGathering(AuctionProductionSession& s
         gather.started = true;
         gather.state = GR_STATE_SELECTING;
 
-        botAI->ChangeStrategy("-gather leveling"), BOT_STATE_NON_COMBAT);
-        botAI->ChangeStrategy("+gather resources"), BOT_STATE_NON_COMBAT);
+        botAI->ChangeStrategy("-gather leveling", BOT_STATE_NON_COMBAT);
+        botAI->ChangeStrategy("+gather resources", BOT_STATE_NON_COMBAT);
         if (!botAI->HasStrategy("gather", BOT_STATE_NON_COMBAT))
-            botAI->ChangeStrategy("+gather"), BOT_STATE_NON_COMBAT);
+            botAI->ChangeStrategy("+gather", BOT_STATE_NON_COMBAT);
 
         LOG_INFO("playerbots.auction", "AuctionProduction {} gathering material {} (skill {}, tier {})",
                  bot->GetGUID().ToString(), itemId, skillId, tier);
@@ -1194,9 +1241,9 @@ void AuctionProductionUpdateAction::HandleGatherMaterials(AuctionProductionSessi
     // If materials are still missing PlanOrder / BuyShortfall will re-stage the
     // handoff (gatherAttempts caps how many times that can happen).
     if (!session.hadGatherResources)
-        botAI->ChangeStrategy("-gather resources"), BOT_STATE_NON_COMBAT);
+        botAI->ChangeStrategy("-gather resources", BOT_STATE_NON_COMBAT);
     if (session.hadGatherLeveling)
-        botAI->ChangeStrategy("+gather leveling"), BOT_STATE_NON_COMBAT);
+        botAI->ChangeStrategy("+gather leveling", BOT_STATE_NON_COMBAT);
     session.hadGatherResources = false;
     session.hadGatherLeveling = false;
     session.gatherRequested = false;
