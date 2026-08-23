@@ -173,6 +173,7 @@ private:
                                              ProfessionSpecializationSpell knownSpell,
                                              ProfessionSpecializationSpell learnSpell);
     void InitTradeSkills();
+    void InitCraftingRecipes();
     void InitTradeSpecializations();
     bool InitAlchemySpecialization();
     bool InitEngineeringSpecialization();
