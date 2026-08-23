@@ -16,14 +16,17 @@
 #include "AuctionPricingRepository.h"
 #include "AuctionSellAction.h"
 #include "Bag.h"
+#include "ChatHelper.h"
 #include "Creature.h"
 #include "Event.h"
 #include "GameObject.h"
+#include "GatherResourcesSessionValue.h"
 #include "Item.h"
 #include "Mail.h"
 #include "MailAction.h"
 #include "ObjectMgr.h"
 #include "PlayerbotAIConfig.h"
+#include "PlayerbotSpellRepository.h"
 #include "Playerbots.h"
 #include "Random.h"
 #include "RandomItemMgr.h"
@@ -484,6 +487,28 @@ bool AuctionProductionUpdateAction::Execute(Event /*event*/)
             PlanOrder(session, product);
             break;
         }
+        case AuctionProductionSession::Phase::BuyVendor:
+            if (!EnsureAtVendor(session))
+            {
+                // Walking to a vendor can take a while; give the bot a travel
+                // budget instead of counting per-tick retries.
+                uint32 const now = getMSTime();
+                if (!session.vendorStart)
+                    session.vendorStart = now;
+                else if (now - session.vendorStart > sPlayerbotAIConfig.auctionProductionTravelBudget)
+                {
+                    LOG_WARN("playerbots.auction", "AuctionProduction {} gave up reaching a vendor",
+                             bot->GetGUID().ToString());
+                    session.insufficientFunds = true;
+                    FinishSession(session);
+                }
+
+                return true;
+            }
+
+            session.vendorStart = 0;
+            BuyFromVendor(session);
+            break;
         case AuctionProductionSession::Phase::BuyMaterials:
             if (!EnsureAtAuctioneer())
             {
@@ -509,8 +534,10 @@ bool AuctionProductionUpdateAction::Execute(Event /*event*/)
         {
             if (session.shortfall.empty())
             {
-                session.phase = session.recipe.size() > 1 ? AuctionProductionSession::Phase::ProcessSteps
-                                                          : AuctionProductionSession::Phase::Craft;
+                session.phase = !session.gatherNeeds.empty() ? AuctionProductionSession::Phase::GatherMaterials
+                                                             : (session.recipe.size() > 1
+                                                                    ? AuctionProductionSession::Phase::ProcessSteps
+                                                                    : AuctionProductionSession::Phase::Craft);
                 break;
             }
 
@@ -519,9 +546,11 @@ bool AuctionProductionUpdateAction::Execute(Event /*event*/)
 
             TakeMailWithItems();
 
-            // Every bought material now present?
+            // All AH-bought materials are in the bag? (Vendor parts were bought
+            // in-hand; gatherables are intentionally still missing and sent to
+            // the gathering handoff below.)
             bool ready = true;
-            for (auto const& need : session.totalNeeds)
+            for (auto const& need : session.shortfall)
                 if (CountOwned(need.first) < need.second)
                 {
                     ready = false;
@@ -535,10 +564,15 @@ bool AuctionProductionUpdateAction::Execute(Event /*event*/)
             }
 
             session.shortfall.clear();
-            session.phase = session.recipe.size() > 1 ? AuctionProductionSession::Phase::ProcessSteps
-                                                      : AuctionProductionSession::Phase::Craft;
+            session.phase = !session.gatherNeeds.empty() ? AuctionProductionSession::Phase::GatherMaterials
+                                                         : (session.recipe.size() > 1
+                                                                ? AuctionProductionSession::Phase::ProcessSteps
+                                                                : AuctionProductionSession::Phase::Craft);
             break;
         }
+        case AuctionProductionSession::Phase::GatherMaterials:
+            HandleGatherMaterials(session);
+            break;
         case AuctionProductionSession::Phase::ProcessSteps:
             RunProcessSteps(session);
             break;
@@ -665,6 +699,7 @@ bool AuctionProductionUpdateAction::PlanOrder(AuctionProductionSession& session,
     session.crafted = CountOwned(product.itemId);  // baseline owned product count
     session.nextStep = 0;
     session.buyStart = 0;
+    session.vendorStart = 0;
     session.insufficientFunds = false;
     session.reserved.clear();
     session.totalNeeds.clear();
@@ -690,10 +725,15 @@ bool AuctionProductionUpdateAction::PlanOrder(AuctionProductionSession& session,
     session.totalNeeds = leafNeeds;
 
     // Deduct bag inventory from the required leaves (respecting the keep-stack
-    // floor, except for enchanting materials which are fully consumable).
-    session.totalNeeds = leafNeeds;
-
+    // floor, except for enchanting materials which are fully consumable), then
+    // split the remaining missing reagents by source:
+    //   vendor-sold parts (vials / flasks / parchment) -> buy from a vendor,
+    //   everything else (herbs, ore, gems, dusts)       -> AH buyout first,
+    //   and if no AH listing exists and the bot can gather it -> gather.
     session.shortfall.clear();
+    session.vendorNeeds.clear();
+    session.gatherNeeds.clear();
+    session.gatherRequested = false;
     for (auto const& leaf : leafNeeds)
     {
         uint32 owned = CountOwned(leaf.first);
@@ -705,8 +745,14 @@ bool AuctionProductionUpdateAction::PlanOrder(AuctionProductionSession& session,
             owned = owned > keep ? owned - keep : 0;
         }
 
-        if (leaf.second > owned)
-            session.shortfall[leaf.first] = leaf.second - owned;
+        if (leaf.second <= owned)
+            continue;
+
+        uint32 const need = leaf.second - owned;
+        if (IsVendorSupply(leaf.first))
+            session.vendorNeeds[leaf.first] = need;
+        else
+            session.shortfall[leaf.first] = need;
     }
 
     // Reserve every raw material and intermediate for this order so the raw
@@ -718,24 +764,53 @@ bool AuctionProductionUpdateAction::PlanOrder(AuctionProductionSession& session,
 
     session.recipe = steps;
 
-    if (session.shortfall.empty())
+    if (session.vendorNeeds.empty() && session.shortfall.empty())
     {
         session.phase = steps.size() > 1 ? AuctionProductionSession::Phase::ProcessSteps
                                          : AuctionProductionSession::Phase::Craft;
+        return true;
     }
-    else
+
+    // Vendor parts take priority: the bot may not have an AH need after all.
+    if (!session.vendorNeeds.empty())
     {
-        if (!sPlayerbotAIConfig.auctionProductionCanBuyMaterials)
+        session.phase = AuctionProductionSession::Phase::BuyVendor;
+        return true;
+    }
+
+    // Only AH-buyable materials remain.
+    if (!sPlayerbotAIConfig.auctionProductionCanBuyMaterials)
+    {
+        // Buying disabled: collect what the bot's gathering skill can provide,
+        // give up on the rest.
+        for (auto it = session.shortfall.begin(); it != session.shortfall.end();)
         {
-            LOG_WARN("playerbots.auction", "AuctionProduction {} shortfall {} but buying disabled",
+            uint32 skillId = 0;
+            uint32 tier = 0;
+            if (IsGatherableLeaf(it->first, skillId, tier))
+            {
+                session.gatherNeeds[it->first] = it->second;
+                session.gatherSkillId = skillId;
+                session.gatherTier = tier;
+                it = session.shortfall.erase(it);
+            }
+            else
+                ++it;
+        }
+
+        if (!session.shortfall.empty())
+        {
+            LOG_WARN("playerbots.auction", "AuctionProduction {} shortfall {} but buying disabled and not gatherable",
                      bot->GetGUID().ToString(), session.shortfall.size());
             FinishSession(session);
             return false;
         }
 
-        session.phase = AuctionProductionSession::Phase::BuyMaterials;
+        session.phase = AuctionProductionSession::Phase::GatherMaterials;
+        return true;
     }
 
+    session.phase = AuctionProductionSession::Phase::BuyMaterials;
     return true;
 }
 
@@ -878,6 +953,304 @@ void AuctionProductionUpdateAction::TakeMailWithItems()
     }
 }
 
+bool AuctionProductionUpdateAction::IsVendorSupply(uint32 itemId) const
+{
+    if (!itemId)
+        return false;
+
+    // Reuses the prebuilt npc_vendor index (maxcount = 0: always-in-stock
+    // tradeskill components such as Crystal Vial, Imbued Vials, parchment).
+    return PlayerbotSpellRepository::Instance().IsItemBuyable(itemId);
+}
+
+bool AuctionProductionUpdateAction::IsGatherableLeaf(uint32 itemId, uint32& skillId, uint32& tier) const
+{
+    if (!itemId)
+        return false;
+
+    ItemTemplate const* proto = sObjectMgr->GetItemTemplate(itemId);
+    if (!proto)
+        return false;
+
+    // Classify by item class/subclass - the gathering skill a leaf belongs to
+    // is determined by what it IS (herb / ore / leather-meat), not by the
+    // RequiredSkill column (which some realms repurpose, e.g. 773 Inscription
+    // for herbs). RandomItemMgr::IsUsedBySkill matches *crafted* items and is
+    // therefore not a suitable gathering test.
+    uint32 skill = 0;
+    if (proto->Class == ITEM_CLASS_TRADE_GOODS)
+    {
+        switch (proto->SubClass)
+        {
+            case ITEM_SUBCLASS_HERB:
+                skill = SKILL_HERBALISM;
+                break;
+            case ITEM_SUBCLASS_METAL_STONE:
+                skill = SKILL_MINING;
+                break;
+            case ITEM_SUBCLASS_LEATHER:
+            case ITEM_SUBCLASS_MEAT:
+                skill = SKILL_SKINNING;
+                break;
+            default:
+                break;
+        }
+    }
+
+    if (!skill || !bot->HasSkill(skill))
+        return false;
+
+    uint32 const rank = proto->RequiredSkillRank;
+    if (rank && bot->GetSkillValue(skill) < rank)
+        return false;
+
+    skillId = skill;
+    tier = rank;
+    return true;
+}
+
+Creature* AuctionProductionUpdateAction::FindVendor()
+{
+    GuidVector npcs = AI_VALUE(GuidVector, "nearest npcs");
+    for (ObjectGuid const guid : npcs)
+    {
+        Creature* creature = botAI->GetCreature(guid);
+        if (!creature || !creature->IsAlive())
+            continue;
+
+        if (creature->HasNpcFlag(UNIT_NPC_FLAG_VENDOR))
+            return creature;
+    }
+
+    return nullptr;
+}
+
+bool AuctionProductionUpdateAction::EnsureAtVendor(AuctionProductionSession& session)
+{
+    // A visible vendor only counts if it can actually sell the needed parts:
+    // walking to the nearest vendor that doesn't stock the reagent would leave
+    // BuyFromVendor unable to complete. With no specific part, any vendor is
+    // fine.
+    Creature* vendor = FindVendor();
+    bool vendorServesNeeds = true;
+    if (vendor && !session.vendorNeeds.empty())
+    {
+        VendorItemData const* vItems = vendor->GetVendorItems();
+        vendorServesNeeds = false;
+        if (vItems)
+            for (auto const& need : session.vendorNeeds)
+                for (auto const& vitem : vItems->m_items)
+                    if (vitem && vitem->item == need.first)
+                    {
+                        vendorServesNeeds = true;
+                        break;
+                    }
+    }
+
+    if (vendor && vendorServesNeeds && bot->IsWithinDistInMap(vendor, INTERACTION_DISTANCE))
+        return true;
+
+    if (!vendor || (!vendorServesNeeds && !bot->IsWithinDistInMap(vendor, INTERACTION_DISTANCE)))
+    {
+        // Not in sight (or the vendor in sight does not stock the part): travel
+        // to the nearest vendor that actually sells one of the required vendor
+        // parts. TravelMgr's rpg destination set is not populated on this
+        // branch, so resolve from spawn data directly. With no specific part
+        // required any vendor qualifies.
+        WorldPosition botPos(bot);
+        CreatureData const* best = nullptr;
+        float bestDist = std::numeric_limits<float>::max();
+
+        for (auto const& [spawnGuid, data] : sObjectMgr->GetAllCreatureData())
+        {
+            CreatureTemplate const* cInfo = sObjectMgr->GetCreatureTemplate(data.id);
+            if (!cInfo || !(cInfo->npcflag & UNIT_NPC_FLAG_VENDOR))
+                continue;
+
+            if (!session.vendorNeeds.empty())
+            {
+                VendorItemData const* vItems = sObjectMgr->GetNpcVendorItemList(data.id);
+                bool sellsPart = false;
+                if (vItems)
+                {
+                    for (auto const& need : session.vendorNeeds)
+                        for (auto const& vitem : vItems->m_items)
+                            if (vitem && vitem->item == need.first)
+                            {
+                                sellsPart = true;
+                                break;
+                            }
+                }
+                if (!sellsPart)
+                    continue;
+            }
+
+            WorldPosition pos(data.mapid, data.posX, data.posY, data.posZ, 0.0f);
+            float const dist = pos.distance(&botPos);
+            if (dist < bestDist)
+            {
+                bestDist = dist;
+                best = &data;
+            }
+        }
+
+        if (!best)
+        {
+            LOG_WARN("playerbots.auction", "AuctionProduction {} found no vendor to travel to",
+                     bot->GetGUID().ToString());
+            return false;
+        }
+
+        MoveTo(best->mapid, best->posX, best->posY, best->posZ, false, false, false, false);
+        return false;
+    }
+
+    MoveTo(vendor, INTERACTION_DISTANCE - 1.0f);
+    return false;
+}
+
+void AuctionProductionUpdateAction::BuyFromVendor(AuctionProductionSession& session)
+{
+    // Buy each vendor-sold reagent up to the required count. Vendors may not
+    // stock a part in this settlement, so give up on the order (this is what
+    // the vendor sourcing replaces - never fall back to the AH for these).
+    for (auto const& need : session.vendorNeeds)
+    {
+        ItemTemplate const* proto = sObjectMgr->GetItemTemplate(need.first);
+        if (!proto)
+            continue;
+
+        uint32 guard = 0;
+        while (CountOwned(need.first) < need.second && guard++ < 8)
+        {
+            if (bot->GetMoney() < proto->BuyPrice)
+            {
+                session.insufficientFunds = true;
+                break;
+            }
+
+            botAI->DoSpecificAction("buy", Event("buy", chat->FormatQItem(need.first)), true);
+        }
+
+        if (CountOwned(need.first) < need.second)
+        {
+            LOG_WARN("playerbots.auction", "AuctionProduction {} could not buy vendor part {} ({})",
+                     bot->GetGUID().ToString(), need.first, need.second - CountOwned(need.first));
+            session.insufficientFunds = true;
+        }
+    }
+
+    if (session.insufficientFunds)
+    {
+        FinishSession(session);
+        return;
+    }
+
+    session.vendorNeeds.clear();
+
+    if (!session.shortfall.empty())
+        session.phase = AuctionProductionSession::Phase::BuyMaterials;
+    else if (!session.gatherNeeds.empty())
+        session.phase = AuctionProductionSession::Phase::GatherMaterials;
+    else
+        session.phase = session.recipe.size() > 1 ? AuctionProductionSession::Phase::ProcessSteps
+                                                  : AuctionProductionSession::Phase::Craft;
+}
+
+void AuctionProductionUpdateAction::RequestGathering(AuctionProductionSession& session)
+{
+    while (!session.gatherNeeds.empty())
+    {
+        if (++session.gatherAttempts > 2)
+        {
+            LOG_WARN("playerbots.auction", "AuctionProduction {} gave up gathering materials",
+                     bot->GetGUID().ToString());
+            FinishSession(session);
+            return;
+        }
+
+        auto next = session.gatherNeeds.begin();
+        uint32 const itemId = next->first;
+        uint32 skillId = 0;
+        uint32 tier = 0;
+        if (!IsGatherableLeaf(itemId, skillId, tier) || !sObjectMgr->GetItemTemplate(itemId))
+        {
+            session.gatherNeeds.erase(next);
+            continue;
+        }
+
+        session.gatherSkillId = skillId;
+        session.gatherTier = tier;
+        session.gatherRequested = true;
+
+        // Arm the gather-resources behaviour to target this material's
+        // profession + tier. Production resumes once the run finishes.
+        session.hadGatherResources = botAI->HasStrategy("gather resources", BOT_STATE_NON_COMBAT);
+        session.hadGatherLeveling = botAI->HasStrategy("gather leveling", BOT_STATE_NON_COMBAT);
+
+        GatherResourcesSession& gather = AI_VALUE_REF(GatherResourcesSession, "gather resources session");
+        gather.targetItemId = itemId;
+        gather.targetSkillId = skillId;
+        gather.targetTier = tier;
+        gather.skillId = skillId;
+        gather.nextStart = 0;
+        gather.started = true;
+        gather.state = GR_STATE_SELECTING;
+
+        botAI->ChangeStrategy("-gather leveling", BOT_STATE_NON_COMBAT);
+        botAI->ChangeStrategy("+gather resources", BOT_STATE_NON_COMBAT);
+        if (!botAI->HasStrategy("gather", BOT_STATE_NON_COMBAT))
+            botAI->ChangeStrategy("+gather", BOT_STATE_NON_COMBAT);
+
+        LOG_INFO("playerbots.auction", "AuctionProduction {} gathering material {} (skill {}, tier {})",
+                 bot->GetGUID().ToString(), itemId, skillId, tier);
+        return;
+    }
+
+    // Nothing available to gather after all: go straight to the craft path.
+    session.phase = session.recipe.size() > 1 ? AuctionProductionSession::Phase::ProcessSteps
+                                              : AuctionProductionSession::Phase::Craft;
+}
+
+void AuctionProductionUpdateAction::HandleGatherMaterials(AuctionProductionSession& session)
+{
+    if (session.gatherAttempts > 2)
+    {
+        LOG_WARN("playerbots.auction", "AuctionProduction {} gave up gathering materials",
+                 bot->GetGUID().ToString());
+        FinishSession(session);
+        return;
+    }
+
+    GatherResourcesSession const& gather = AI_VALUE(GatherResourcesSession, "gather resources session");
+
+    // The gather behaviour still carries our request: keep waiting for it.
+    if (gather.targetItemId != 0)
+        return;
+
+    // First entry into this phase: arm the gather behaviour for the missing
+    // materials.
+    if (!session.gatherRequested)
+    {
+        RequestGathering(session);
+        return;
+    }
+
+    // A previous gather run finished (controller cleared the override): restore
+    // the pre-run strategy set, then re-plan against the bot's new inventory.
+    // If materials are still missing PlanOrder / BuyShortfall will re-stage the
+    // handoff (gatherAttempts caps how many times that can happen).
+    if (!session.hadGatherResources)
+        botAI->ChangeStrategy("-gather resources", BOT_STATE_NON_COMBAT);
+    if (session.hadGatherLeveling)
+        botAI->ChangeStrategy("+gather leveling", BOT_STATE_NON_COMBAT);
+    session.hadGatherResources = false;
+    session.hadGatherLeveling = false;
+    session.gatherRequested = false;
+
+    session.phase = AuctionProductionSession::Phase::Plan;
+}
+
 bool AuctionProductionUpdateAction::BuyShortfall(AuctionProductionSession& session)
 {
     // Locate the cheapest listing for each missing material in the bot's own
@@ -891,6 +1264,7 @@ bool AuctionProductionUpdateAction::BuyShortfall(AuctionProductionSession& sessi
     };
 
     std::map<uint32, Offer> best;
+    std::vector<uint32> toGather;
     AuctionHouseObject* house = sAuctionMgr->GetAuctionsMap(bot->GetFaction());
     uint32 const now = static_cast<uint32>(time(nullptr));
 
@@ -911,6 +1285,23 @@ bool AuctionProductionUpdateAction::BuyShortfall(AuctionProductionSession& sessi
 
         if (!entry.auctionId)
         {
+            // No affordable listing on the AH: if the bot's own gathering
+            // skill can collect this leaf, hand it to the gathering behaviour
+            // instead of failing the whole order.
+            uint32 skillId = 0;
+            uint32 tier = 0;
+            if (IsGatherableLeaf(reagentId, skillId, tier))
+            {
+                session.gatherNeeds[reagentId] = missing.second;
+                session.gatherSkillId = skillId;
+                session.gatherTier = tier;
+                toGather.push_back(reagentId);
+                LOG_INFO("playerbots.auction",
+                         "AuctionProduction {} no listing for material {}, will gather instead",
+                         bot->GetGUID().ToString(), reagentId);
+                continue;
+            }
+
             LOG_WARN("playerbots.auction", "AuctionProduction {} no buyout listing for material {}",
                      bot->GetGUID().ToString(), reagentId);
             FinishSession(session);
@@ -918,6 +1309,18 @@ bool AuctionProductionUpdateAction::BuyShortfall(AuctionProductionSession& sessi
         }
 
         best[reagentId] = entry;
+    }
+
+    // Pull gathered materials out of the buyout set (they arrive via the
+    // gather behaviour instead of the mail).
+    for (uint32 const id : toGather)
+        session.shortfall.erase(id);
+
+    // Everything was handed to the gathering behaviour (no buyout needed).
+    if (best.empty())
+    {
+        session.phase = AuctionProductionSession::Phase::GatherMaterials;
+        return true;
     }
 
     // Affordability: the total cheapest buyout must fit the budget and the

@@ -103,6 +103,15 @@ private:
     bool FindMailbox(ObjectGuid& mailbox);
     bool EnsureAtMailbox();
 
+    bool IsVendorSupply(uint32 itemId) const;
+    bool IsGatherableLeaf(uint32 itemId, uint32& skillId, uint32& tier) const;
+
+    bool EnsureAtVendor(AuctionProductionSession& session);
+    Creature* FindVendor();
+    void BuyFromVendor(AuctionProductionSession& session);
+    void RequestGathering(AuctionProductionSession& session);
+    void HandleGatherMaterials(AuctionProductionSession& session);
+
     bool BuyShortfall(AuctionProductionSession& session);
     void TakeMailWithItems();
 
