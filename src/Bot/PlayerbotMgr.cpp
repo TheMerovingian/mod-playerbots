@@ -189,6 +189,7 @@ void PlayerbotHolder::AddPlayerBot(ObjectGuid playerGuid, uint32 masterAccountId
 
 bool PlayerbotHolder::IsAccountLinked(uint32 accountId, uint32 linkedAccountId)
 {
+    if (!linkedAccountId) return false;
     QueryResult result = PlayerbotsDatabase.Query(
         "SELECT 1 FROM playerbots_account_links WHERE account_id = {} AND linked_account_id = {}", accountId, linkedAccountId);
     return result != nullptr;
